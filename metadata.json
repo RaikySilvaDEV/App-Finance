@@ -1,0 +1,6 @@
+{
+  "name": "FinPulse - Open Finance & Investimentos Inteligentes",
+  "description": "App com Open Finance para acompanhamento de ganhos diários, semanais e mensais, recomendações dos melhores ativos e análise personalizada de risco com IA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
