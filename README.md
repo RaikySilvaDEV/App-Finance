@@ -55,7 +55,15 @@ O MeuPluggy pessoal continua limitado à atualização diária do provedor. A in
 
 ### Dados dos empréstimos Pluggy
 
+O mapeamento preserva os campos originais e acrescenta `outstandingBalance` a partir de `payments.contractOutstandingBalance`, além de `interestRate`, sua base e periodicidade quando houver uma taxa simples, e `interestRateTerms` com todos os componentes convertidos de fração para percentual. Taxas compostas ou múltiplas não são reduzidas a um único número. `nextDueDate` só é preenchido se o provedor informar explicitamente essa data: vencimento final e primeira parcela não são usados como substitutos. Os avisos consideram a próxima data informada e a contagem de parcelas em atraso do banco; uma data passada pede conferência, sem afirmar pagamento pendente como fato confirmado.
+
 A interface apresenta os campos documentados que a conexão fornecer: contrato/IPOC, modalidade, datas, valor contratado e saldo para quitação, CET, amortização, juros e indexadores, tarifas, encargos, garantias, prazo, parcelas, pagamentos e cobranças adicionais. Campos ausentes são indicados. A primeira parcela e o vencimento final não são tratados como a próxima parcela. As taxas pré e pós-fixadas seguem a convenção documentada `1 = 100%`; o CET e demais taxas percentuais são mostrados conforme retornados. Consulte a [documentação de empréstimos](https://docs.pluggy.ai/pt/docs/products/loans).
+
+### Renda fixa conectada
+
+Em **Ativos**, o filtro inicial seleciona `FIXED_INCOME` em reais com subtipo elegível ao FGC (CDB, RDB, LCI, LCA, LC, LCD, LH) ou `TREASURY` identificado como Tesouro Selic/LFT pelo nome. CRI, CRA, debêntures, LF, LIG, COE e fundos não entram nessa seleção. Outros filtros permitem consultar toda a renda fixa ou a carteira inteira, preservando os totais gerais. Elegibilidade de produto não confirma associação do emissor, cobertura individual, limites disponíveis, liquidez ou ausência de risco.
+
+O campo `balance_amount` representa `balance`, o saldo líquido atual informado. `yield_rate` representa `rate` com `yield_rate_basis` indicando o indexador; na ausência de `rate`, usa `fixedAnnualRate` como percentual anual. O adicional anual fica em `yield_fixed_annual_rate`. A interface mostra os dois componentes quando existirem (ex.: `100% de CDI + 5% ao ano`), sem tratar 100% do CDI como retorno anual de 100%. Dados ausentes permanecem nulos. A API aceita os filtros opcionais `type=FIXED_INCOME` e `focus=conservative`.
 
 ## Login e dados salvos
 

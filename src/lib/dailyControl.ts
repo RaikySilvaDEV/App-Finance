@@ -1,5 +1,6 @@
 import { billOccurrences, brazilDay, installmentDate, isConsumption, normalizedText } from './planning';
 import type { ClassifiedTransaction, PlanningData } from './planning';
+import { normalizeLoan } from './productMapping';
 
 export function findRecurrences(transactions: ClassifiedTransaction[], today = brazilDay()) {
   const groups = new Map<string, ClassifiedTransaction[]>();
@@ -32,10 +33,19 @@ export function commitments(data: PlanningData) {
   return [...bills, ...loans].sort((a, b) => a.date.localeCompare(b.date));
 }
 export type DailyAlert = { id: string; title: string; detail: string; severity: 'warning' | 'info'; target: 'bills' | 'budgets' | 'connections' | 'recurring' | 'loans'; month?: string };
-export function dailyAlerts(data: PlanningData, transactions: ClassifiedTransaction[], connections: any[], today = brazilDay()): DailyAlert[] {
+export function dailyAlerts(data: PlanningData, transactions: ClassifiedTransaction[], connections: any[], today = brazilDay(), loans: any[] = []): DailyAlert[] {
   const alerts: DailyAlert[] = [];
   const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const cutoff = new Date(`${today}T12:00:00Z`); cutoff.setUTCDate(cutoff.getUTCDate() + 7);
+  for (const raw of loans) {
+    const loan = normalizeLoan(raw);
+    if (loan.outstandingBalance != null && loan.outstandingBalance <= 0) continue;
+    const overdue = (loan.pastDueInstallments || 0) > 0;
+    const due = loan.nextDueDate;
+    if (!overdue && (!due || due > cutoff.toISOString().slice(0, 10))) continue;
+    const name = loan.productName || 'Empréstimo conectado';
+    alerts.push({ id: `connected-loan:${loan.id}`, title: overdue ? 'Banco informou parcelas em atraso' : due! < today ? 'Vencimento do empréstimo passou: confira' : 'Vencimento de empréstimo próximo', detail: `${name} · ${loan.institution || 'Instituição conectada'}${due ? ` · vencimento ${due.split('-').reverse().join('/')}` : ''}${overdue ? ` · ${loan.pastDueInstallments} parcela(s) em atraso informada(s)` : ' · confira no banco se a parcela já foi paga'}${loan.outstandingBalance != null ? ` · saldo devedor do contrato ${loan.outstandingBalance.toLocaleString('pt-BR', { style: 'currency', currency: loan.currencyCode || 'BRL' })}` : ''}`, severity: 'warning', target: 'loans' });
+  }
   for (const bill of commitments(data).filter((row) => !row.paid && row.date <= cutoff.toISOString().slice(0, 10))) {
     alerts.push({ id: bill.id, title: bill.date < today ? 'Pagamento pendente de confirmação' : bill.date === today ? 'Vence hoje' : 'Vence nos próximos 7 dias', detail: `${bill.title} · ${bill.bank || 'Manual'} · ${money(bill.amount)} · ${bill.date.split('-').reverse().join('/')} · pagamento não confirmado no sistema`, severity: 'warning', target: bill.source === 'Próxima parcela manual' ? 'loans' : 'bills', month: bill.date.slice(0, 7) });
   }

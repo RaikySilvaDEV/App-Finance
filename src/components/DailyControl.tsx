@@ -8,7 +8,7 @@ import { PlanningEditor } from './PlanningSection';
 import { BankLogo } from './BankLogo';
 
 const panel = 'rounded-xl border border-slate-800 bg-slate-900/40 p-4 sm:p-5';
-export type ControlData = { connections: any[]; sync: { active?: boolean; warning?: string; activatedAt?: string; cache?: any[]; alerts?: any[] }; error: string };
+export type ControlData = { connections: any[]; loans?: any[]; sync: { active?: boolean; warning?: string; activatedAt?: string; cache?: any[]; alerts?: any[] }; error: string };
 export function SyncStatus({ data, reload }: { data: ControlData; reload: () => void }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   // Wait for the initial status and keep successful activation out of the layout.
@@ -30,7 +30,7 @@ export function MoneyAvailable({ accounts, cards, investments, loans, data, priv
 }
 
 export function AlertSummary({ data, transactions, controls, privateMode, onOpen }: { data: PlanningData; transactions: ClassifiedTransaction[]; controls: ControlData; privateMode: boolean; onOpen: () => void }) {
-  const alerts = dailyAlerts(data, transactions, controls.connections);
+  const alerts = dailyAlerts(data, transactions, controls.connections, undefined, controls.loans);
   return <button onClick={onOpen} className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-800 p-4 text-left"><span className="flex items-center gap-3 text-sm text-slate-200"><Bell className="h-4 w-4 text-rose-300"/>{alerts.length ? `${privateMode ? '••' : alerts.length} avisos para conferir` : 'Seu controle diário'}</span><span className="text-xs text-slate-500">Planejamento →</span></button>;
 }
 
@@ -41,7 +41,7 @@ export function DailyControlPanel({ view, data, onChange, transactions, privateM
   const date = (value: string) => value.split('-').reverse().join('/');
   const recurring = useMemo(() => findRecurrences(transactions), [transactions]);
   const decisions = data.recurrenceDecisions || {};
-  const alerts = dailyAlerts(data, transactions, controls.connections);
+  const alerts = dailyAlerts(data, transactions, controls.connections, undefined, controls.loans);
   const installments = transactions.filter((tx) => tx.sourceAccountType === 'CREDIT' && tx.direction === 'debit' && (tx.creditCardMetadata?.totalInstallments || 0) > 1).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   const visible = installments.filter((tx) => (!bank || tx.sourceAccountName === bank) && brazilDay(tx.timestamp).slice(0, 7) === month);
   return <section className="space-y-4">

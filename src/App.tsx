@@ -119,6 +119,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
     setLoans(saved.flatMap((row) => row.loans || []));
     setHasLoadedBankData(true);
   }, [controls.data.sync.cache, hasLoadedBankData, pluggyItemIds]);
+  const controlView = { ...controls.data, loans };
   // Modals
   const [selectedAssetForRisk, setSelectedAssetForRisk] = useState<Asset | null>(null);
   const [isRiskModalOpen, setIsRiskModalOpen] = useState<boolean>(false);
@@ -438,9 +439,9 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         {history.error && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{history.error} Os dados consultados continuam visíveis, mas esta atualização pode não ter sido salva no histórico.</p>}
         {bankDataLoading && hasLoadedBankData && !showDataSkeleton && <p role="status" className="flex items-center gap-2 text-xs text-slate-400"><RefreshCw aria-hidden="true" className="h-3.5 w-3.5 animate-spin"/>Atualizando dados… Os últimos valores permanecem visíveis.</p>}
         {showDataSkeleton ? <DataSkeleton label={menuTransitioning ? 'Abrindo seção…' : 'Carregando seus dados financeiros…'} variant={activeTab === 'overview' ? 'overview' : activeTab === 'connections' ? 'connections' : activeTab === 'ledger' || activeTab === 'planning' ? 'ledger' : 'list'}/> : <div key={activeTab} className="menu-content space-y-6">
-        {activeTab === 'planning' && <PlanningSection data={planning} onChange={setPlanning} transactions={classifiedTransactions} privateMode={isPrivateMode} history={history} controls={controls.data} onConnections={() => navigateToTab('connections')} onLoans={() => navigateToTab('loans')}/>}
+        {activeTab === 'planning' && <PlanningSection data={planning} onChange={setPlanning} transactions={classifiedTransactions} privateMode={isPrivateMode} history={history} controls={controlView} onConnections={() => navigateToTab('connections')} onLoans={() => navigateToTab('loans')}/>}
         {activeTab === 'overview' && <>
-        <AlertSummary data={planning} transactions={classifiedTransactions} controls={controls.data} privateMode={isPrivateMode} onOpen={() => navigateToTab('planning')}/>
+        <AlertSummary data={planning} transactions={classifiedTransactions} controls={controlView} privateMode={isPrivateMode} onOpen={() => navigateToTab('planning')}/>
         <MoneyAvailable accounts={bankAccounts} cards={creditCards} investments={providerInvestments} loans={loans} data={planning} privateMode={isPrivateMode}/>
         <FinancialOverview accounts={bankAccounts} cards={creditCards} investments={providerInvestments} privateMode={isPrivateMode} onOpenAccounts={() => navigateToTab('accounts')} onOpenAssets={() => navigateToTab('assets')} onConnect={() => setIsOpenFinanceConsentOpen(true)}/>
         <BalanceEvolution accounts={bankAccounts} transactions={history.allTransactions} isPrivateMode={isPrivateMode} snapshots={history.snapshots}/>

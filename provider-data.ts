@@ -1,4 +1,5 @@
 import { pluggyRequest } from './pluggy.js';
+import { normalizeInvestment, normalizeLoan } from './src/lib/productMapping.js';
 
 export async function readAccounts(ids: string[]) {
   if (!ids.length) return { accounts: [], creditCards: [], unavailableItems: [] };
@@ -123,7 +124,7 @@ export async function readInvestments(ids: string[]) {
       const pages = await Promise.all(Array.from({ length: Math.max(0, (Number(firstPage.totalPages) || 1) - 1) }, (_, index) =>
         pluggyRequest(`/investments?itemId=${encodeURIComponent(itemId)}&page=${index + 2}&pageSize=100`)
       ));
-      investments.push(...[...(firstPage.results || []), ...pages.flatMap((page: any) => page.results || [])].map((asset: any) => ({ ...asset, providerItemId: itemId })));
+      investments.push(...[...(firstPage.results || []), ...pages.flatMap((page: any) => page.results || [])].map((asset: any) => normalizeInvestment({ ...asset, providerItemId: itemId })));
       } catch { unavailableItems.push(itemId); }
     }
     return ({ investments, unavailableItems, complete: unavailableItems.length === 0 });
@@ -153,7 +154,7 @@ export async function readLoans(ids: string[]) {
         page += 1;
       } while (page <= totalPages && page <= 100);
       if (page <= totalPages) unavailableItems.push(itemId);
-      loans.push(...collected.map((loan: any) => ({ ...loan, institution: item.connector?.name || 'Instituição conectada' })));
+      loans.push(...collected.map((loan: any) => normalizeLoan({ ...loan, providerItemId: itemId, institution: item.connector?.name || 'Instituição conectada' })));
     } catch { unavailableItems.push(itemId); }
   }
   return ({ loans, complete: ids.length > 0 && unavailableItems.length === 0, unavailableItems, unsupportedItems });

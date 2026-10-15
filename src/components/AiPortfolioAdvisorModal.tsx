@@ -1,3 +1,4 @@
+import { normalizeLoan, normalizeInvestment } from '../lib/productMapping';
 import React, { useState, useEffect } from 'react';
 import { 
   X, 
@@ -54,16 +55,21 @@ export const AiPortfolioAdvisorModal: React.FC<AiPortfolioAdvisorModalProps> = (
     return acc;
   }, {} as Record<string, number>);
 
+  const mappedLoans = loans.map(normalizeLoan);
+  const mappedInvestments = investments.map(normalizeInvestment);
   const financialSnapshot = {
             currency: 'BRL',
             bankBalance: bankAccounts.filter((account) => (account.currencyCode || 'BRL') === 'BRL').reduce((sum, account) => sum + account.balance, 0),
             connectedInvestments: investments.filter((asset) => (asset.currencyCode || 'BRL') === 'BRL').reduce((sum, asset) => sum + (Number(asset.balance) || 0), 0),
+            fixedIncomeBalance: mappedInvestments.filter((asset) => asset.type === 'FIXED_INCOME' && (asset.currencyCode || 'BRL') === 'BRL').reduce((sum, asset) => sum + (asset.balance_amount || 0), 0),
+            conservativeProductBalance: mappedInvestments.filter((asset) => asset.conservativeCandidate).reduce((sum, asset) => sum + (asset.balance_amount || 0), 0),
+            connectedLoanTerms: mappedLoans.map((loan) => ({ outstandingBalance: loan.outstandingBalance, currencyCode: loan.currencyCode, interestRate: loan.interestRate, interestRateTerms: loan.interestRateTerms, nextDueDate: loan.nextDueDate, pastDueInstallments: loan.pastDueInstallments })),
             creditCardBalance: creditCards.filter((card) => card.currencyCode === 'BRL').reduce((sum, card) => sum + (Number(card.balance) || 0), 0),
-            knownLoanBalance: loans.filter((loan) => (loan.currencyCode || 'BRL') === 'BRL' && loan.payments?.contractOutstandingBalance != null).reduce((sum, loan) => sum + Number(loan.payments.contractOutstandingBalance), 0),
+            knownLoanBalance: mappedLoans.filter((loan) => (loan.currencyCode || 'BRL') === 'BRL' && loan.outstandingBalance != null).reduce((sum, loan) => sum + loan.outstandingBalance, 0),
             manualLoanBalance: manualLoans.filter((loan) => !loan.alsoConnected).reduce((sum, loan) => sum + loan.outstanding, 0),
             manualLoans: manualLoans.filter((loan) => !loan.alsoConnected).map((loan) => ({ outstanding: loan.outstanding, installment: loan.installment, remaining: loan.remaining, nextDue: loan.nextDue })),
             loansReturned: loans.length,
-            loansWithoutBalance: loans.filter((loan) => loan.payments?.contractOutstandingBalance == null).length,
+            loansWithoutBalance: mappedLoans.filter((loan) => loan.outstandingBalance == null).length,
             loanQueryComplete: loansComplete,
             note: 'Ausência de registros não comprova ausência de empréstimos. Valores somente em BRL; posições manuais podem duplicar investimentos conectados.',
           };
@@ -112,6 +118,8 @@ Perfil: ${investorProfile}.
 Valores resumidos em reais:
 Saldo das contas: ${financialSnapshot.bankBalance}.
 Investimentos conectados: ${financialSnapshot.connectedInvestments}.
+Renda fixa conectada: ${financialSnapshot.fixedIncomeBalance}; produtos elegíveis ao FGC ou Tesouro Selic identificado: ${financialSnapshot.conservativeProductBalance}. Elegibilidade não confirma cobertura individual, liquidez ou ausência de risco.
+Taxas e vencimentos informados dos empréstimos conectados: ${JSON.stringify(financialSnapshot.connectedLoanTerms)}. Datas ausentes não devem ser estimadas como confirmadas.
 Saldo informado nos cartões: ${financialSnapshot.creditCardBalance}.
 Saldo devedor conhecido de empréstimos conectados: ${financialSnapshot.knownLoanBalance}.
 Total restante dos empréstimos manuais que não foram marcados como duplicados: ${financialSnapshot.manualLoanBalance}.

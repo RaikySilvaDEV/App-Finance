@@ -148,7 +148,11 @@ app.get('/api/open-finance/transactions', async (req, res) => {
 
 app.get('/api/open-finance/investments', async (req, res) => {
   const ids = (Array.isArray(req.query.itemId) ? req.query.itemId : req.query.itemId ? [req.query.itemId] : []).map(String).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
-  try { res.json(await readInvestments(ids)); } catch { res.status(503).json({ error: 'Não foi possível consultar os dados bancários.' }); }
+  try {
+    const data = await readInvestments(ids);
+    const investments = data.investments.filter((asset: any) => (!req.query.type || asset.type === String(req.query.type).toUpperCase()) && (req.query.focus !== 'conservative' || asset.conservativeCandidate));
+    res.json({ ...data, investments });
+  } catch { res.status(503).json({ error: 'Não foi possível consultar os dados bancários.' }); }
 });
 
 app.get('/api/open-finance/loans', async (req, res) => {
