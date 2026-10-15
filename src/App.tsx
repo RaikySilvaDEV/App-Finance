@@ -50,7 +50,7 @@ import { AiPortfolioAdvisorModal } from './components/AiPortfolioAdvisorModal';
 import { AddHoldingModal } from './components/AddHoldingModal';
 import { TransactionLedgerSection } from './components/TransactionLedgerSection';
 import { OpenFinanceConsentModal } from './components/OpenFinanceConsentModal';
-import { InvestmentAcademyModal } from './components/InvestmentAcademyModal';
+import { InvestmentAcademySection } from './components/InvestmentAcademySection';
 
 
 import { 
@@ -152,7 +152,6 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
   // Movement & Bank Modals
   const [reconnectItem, setReconnectItem] = useState<string | undefined>();
   const [isOpenFinanceConsentOpen, setIsOpenFinanceConsentOpen] = useState<boolean>(false);
-  const [isAcademyModalOpen, setIsAcademyModalOpen] = useState<boolean>(false);
 
   // Sync state & feedback
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -440,7 +439,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         onOpenAddModal={() => setIsAddModalOpen(true)}
         bankAccounts={bankAccounts}
         onOpenBankManagerModal={() => navigateToTab('connections')}
-        onOpenAcademyModal={() => setIsAcademyModalOpen(true)}
+        onOpenAcademyModal={() => navigateToTab('learn')}
         onToggleSidebar={() => setIsSidebarOpen(true)}
         userEmail={email}
         onLogout={() => void logoutSafely()}
@@ -454,18 +453,19 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
           onSelectTab={navigateToTab}
           onClose={() => setIsSidebarOpen(false)}
           onConnect={() => setIsOpenFinanceConsentOpen(true)}
-          onAcademy={() => setIsAcademyModalOpen(true)}
+          onAcademy={() => navigateToTab('learn')}
           onAdvisor={() => setIsAiAdvisorOpen(true)}
         />
       {/* Main Content Area */}
       <main id="overview" aria-busy={showDataSkeleton} className="min-w-0 flex-1 w-full px-4 pt-5 pb-24 sm:px-6 lg:px-7 lg:py-8 space-y-6">
-        <div><h1 className="text-2xl font-semibold tracking-tight text-white">{{ overview: 'Visão geral', accounts: 'Contas e cartões', assets: 'Ativos', ledger: 'Fluxo de caixa', market: 'Mercado', portfolio: 'Posições manuais', loans: 'Empréstimos', connections: 'Conexões', planning: 'Planejamento' }[activeTab]}</h1><SectionInfo title="Sobre esta seção">{{ overview: 'Uma visão das suas finanças conectadas.', accounts: 'Saldos bancários, cartões e limites.', assets: 'Seus investimentos conectados, organizados por classe ou instituição.', ledger: 'Acompanhe entradas, despesas e movimentações.', market: 'Indicadores e oportunidades de investimento.', portfolio: 'Acompanhe os ativos que você cadastrou.', loans: 'Empréstimos conectados e valores cadastrados por você.', connections: 'Suas instituições, atualizações e autorizações.', planning: 'Orçamento, compromissos, metas e histórico, salvos na sua conta.' }[activeTab]}</SectionInfo></div>
+        <div><h1 className="text-2xl font-semibold tracking-tight text-white">{{ overview: 'Visão geral', accounts: 'Contas e cartões', assets: 'Ativos', ledger: 'Fluxo de caixa', market: 'Mercado', portfolio: 'Posições manuais', loans: 'Empréstimos', connections: 'Conexões', planning: 'Planejamento', learn: 'Aprender' }[activeTab]}</h1><SectionInfo title="Sobre esta seção">{{ overview: 'Uma visão das suas finanças conectadas.', accounts: 'Saldos bancários, cartões e limites.', assets: 'Seus investimentos conectados, organizados por classe ou instituição.', ledger: 'Acompanhe entradas, despesas e movimentações.', market: 'Indicadores e oportunidades de investimento.', portfolio: 'Acompanhe os ativos que você cadastrou.', loans: 'Empréstimos conectados e valores cadastrados por você.', connections: 'Suas instituições, atualizações e autorizações.', planning: 'Orçamento, compromissos, metas e histórico, salvos na sua conta.', learn: 'Aulas, simulador e conceitos para aprender no seu ritmo.' }[activeTab]}</SectionInfo></div>
         {(savingData || saveError) && <p role="status" className="text-xs text-slate-500">{savingData ? 'Salvando seus dados…' : 'Dados ainda não salvos'}</p>}
         {saveError && <div role="alert" className="rounded-lg border border-rose-500/30 p-3 text-sm text-rose-300">{saveError}<button onClick={() => { setSavingData(true); saveUserData().then(() => setSaveError(null)).catch((error) => setSaveError(error.message)).finally(() => setSavingData(false)); }} className="ml-3 underline">Tentar salvar novamente</button></div>}
         {providerSyncError && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{providerSyncError}</p>}
         {history.error && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{history.error} Os dados consultados continuam visíveis, mas esta atualização pode não ter sido salva no histórico.</p>}
         {bankDataLoading && hasLoadedBankData && !showDataSkeleton && <p role="status" className="flex items-center gap-2 text-xs text-slate-400"><RefreshCw aria-hidden="true" className="h-3.5 w-3.5 animate-spin"/>Atualizando dados… Os últimos valores permanecem visíveis.</p>}
         {showDataSkeleton ? <DataSkeleton label={menuTransitioning ? 'Abrindo seção…' : 'Carregando seus dados financeiros…'} variant={activeTab === 'overview' ? 'overview' : activeTab === 'connections' ? 'connections' : activeTab === 'ledger' || activeTab === 'planning' ? 'ledger' : 'list'}/> : <div key={activeTab} className="menu-content space-y-6">
+        {activeTab === 'learn' && <InvestmentAcademySection selicRateAnnual={realIndicators?.selic.metaAnnualPct} cdiRateAnnual={realIndicators?.cdi.annualizedPct}/>}
         {activeTab === 'planning' && <PlanningSection data={planning} onChange={setPlanning} transactions={classifiedTransactions} privateMode={isPrivateMode} history={history} controls={controlView} onConnections={() => navigateToTab('connections')} onLoans={() => navigateToTab('loans')}/>}
         {activeTab === 'overview' && <>
         <AlertSummary data={planning} transactions={classifiedTransactions} controls={controlView} privateMode={isPrivateMode} onOpen={() => navigateToTab('planning')}/>
@@ -585,12 +585,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         onConnected={handlePluggyConnected}
       />
 
-      <InvestmentAcademyModal
-        isOpen={isAcademyModalOpen}
-        onClose={() => setIsAcademyModalOpen(false)}
-        selicRateAnnual={realIndicators?.selic.metaAnnualPct}
-        cdiRateAnnual={realIndicators ? realIndicators.cdi.annualizedPct : undefined}
-      />
+
     </div>
   );
 }

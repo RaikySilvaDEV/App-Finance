@@ -57,11 +57,11 @@ button:disabled { cursor: default; }
 .academy-reading [class*="text-violet"],
 .academy-reading [class*="text-amber"] { color: #d4d4d8; }
 .academy-reading [class*="rounded-full"] { background: #222225; border-color: #36363e; color: #a1a1aa; }
-.academy-dialog [class*="bg-gradient"] { background-image: none; }
-.academy-dialog input[type="range"] { accent-color: #f12b58; max-width: 100%; }
-.academy-dialog summary::-webkit-details-marker { display: none; }
+.academy-section [class*="bg-gradient"] { background-image: none; }
+.academy-section input[type="range"] { accent-color: #f12b58; max-width: 100%; }
+.academy-section summary::-webkit-details-marker { display: none; }
 @media (max-width: 359px) {
-  .academy-dialog .academy-reading .grid { grid-template-columns: minmax(0, 1fr); }
+  .academy-section .academy-reading .grid { grid-template-columns: minmax(0, 1fr); }
 }
 :focus-visible { outline: 2px solid #f12b58; outline-offset: 3px; }
 #overview > section { animation: none; }

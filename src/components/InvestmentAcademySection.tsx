@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { 
   X, 
   GraduationCap, 
@@ -25,18 +25,12 @@ import {
   ArrowLeft
 } from 'lucide-react';
 
-interface InvestmentAcademyModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onOpenMovementModal?: () => void;
+interface InvestmentAcademySectionProps {
   selicRateAnnual?: number;
   cdiRateAnnual?: number;
 }
 
-export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
-  isOpen,
-  onClose,
-  onOpenMovementModal,
+export const InvestmentAcademySection: React.FC<InvestmentAcademySectionProps> = ({
   selicRateAnnual,
   cdiRateAnnual,
 }) => {
@@ -44,30 +38,6 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
   const [selectedModule, setSelectedModule] = useState<number>(0);
   const [glossarySearch, setGlossarySearch] = useState('');
   const [quizStep, setQuizStep] = useState(0);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!isOpen) return;
-    const previousFocus = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    dialogRef.current?.querySelector<HTMLElement>('button')?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); }
-      if (event.key !== 'Tab') return;
-      const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input, select, summary, [tabindex="0"]') || [])].filter((element) => element.getClientRects().length > 0);
-      const first = focusable[0], last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => { document.body.style.overflow = previousOverflow; document.removeEventListener('keydown', onKey); previousFocus?.focus(); };
-  }, [isOpen]);
-  useEffect(() => { if (contentRef.current) contentRef.current.scrollTop = 0; }, [activeTab, selectedModule, quizStep]);
-
-
   // Simulator State
   const [initialAmount, setInitialAmount] = useState<number>(1000);
   const [monthlyContribution, setMonthlyContribution] = useState<number>(300);
@@ -78,7 +48,6 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
   const [quizSubmitted, setQuizSubmitted] = useState<boolean>(false);
 
-  if (!isOpen) return null;
 
   const formatBrl = (val: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -494,16 +463,11 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
   const searchTerm = glossarySearch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   const filteredGlossary = glossary.filter((item) => (item.term + ' ' + item.desc).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(searchTerm));
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-0 backdrop-blur-sm sm:p-5" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="academy-title" className="academy-dialog flex h-[100dvh] w-full min-w-0 flex-col overflow-hidden border-slate-800 bg-[#101012] shadow-2xl sm:h-[min(88dvh,850px)] sm:max-w-5xl sm:rounded-2xl sm:border">
-        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-800 px-5 py-5 sm:px-7">
-          <div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-300"><BookOpen className="h-5 w-5"/></div><div className="min-w-0"><h2 id="academy-title" className="text-base font-semibold text-white">Aprender</h2><p className="mt-1 text-xs text-slate-500">Um passo de cada vez, no seu ritmo.</p></div></div>
-          <button onClick={onClose} aria-label="Fechar Aprender" className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"><X className="h-5 w-5"/></button>
-        </header>
-        <nav aria-label="Conteúdos de Aprender" className="grid shrink-0 grid-cols-4 gap-1 border-b border-slate-800 px-3 py-2 sm:flex sm:px-6">
+    <section aria-label="Conteúdo de Aprender" className="academy-section min-w-0 space-y-5">
+        <nav aria-label="Conteúdos de Aprender" className="grid grid-cols-4 gap-1 rounded-xl border border-slate-800 bg-slate-900/40 p-2 sm:flex">
           {([{ id: 'trilha', label: 'Aulas', Icon: BookOpen }, { id: 'simulador', label: 'Simulador', Icon: Calculator }, { id: 'quiz', label: 'Quiz', Icon: HelpCircle }, { id: 'glossario', label: 'Glossário', Icon: Layers }] as const).map(({ id, label, Icon }) => <button key={id} onClick={() => setActiveTab(id)} aria-current={activeTab === id ? 'page' : undefined} className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-[11px] font-medium transition-colors sm:px-4 sm:text-xs ${activeTab === id ? 'bg-white/[0.06] text-white' : 'text-slate-500 hover:bg-white/[0.03] hover:text-slate-300'}`}><Icon className={`hidden h-3.5 w-3.5 min-[360px]:block ${activeTab === id ? 'text-rose-300' : ''}`}/>{label}</button>)}
         </nav>
-        <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+        <div className="min-w-0">
           {/* TAB 1: TRILHA DE APRENDIZADO */}
           {activeTab === 'trilha' && <div className="grid min-w-0 gap-5 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)]">
             <aside className="min-w-0"><div className="mb-4 flex items-center justify-between px-1"><h3 className="text-xs font-medium text-slate-400">Sua trilha</h3><span className="text-[10px] text-slate-500">{modules.length} aulas</span></div>
@@ -845,15 +809,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
                     <RotateCcw className="w-4 h-4" />
                   </button>
 
-                  {onOpenMovementModal && (
-                    <button
-                      onClick={() => { onClose(); onOpenMovementModal(); }}
-                      className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/20"
-                    >
-                      <Coins className="w-4 h-4" />
-                      <span>Fazer Primeiro Aporte Real</span>
-                    </button>
-                  )}
+
                 </div>
               </div>
             </div>
@@ -863,8 +819,6 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
           {activeTab === 'glossario' && <div className="mx-auto max-w-2xl space-y-5"><div><h3 className="text-lg font-semibold text-white">Termos sem complicação</h3><p className="mt-2 text-xs text-slate-500">Encontre uma palavra e abra sua explicação.</p></div><label className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3"><Search className="h-4 w-4 shrink-0 text-slate-500"/><input aria-label="Buscar no glossário" type="search" value={glossarySearch} onChange={(event) => setGlossarySearch(event.target.value)} placeholder="Buscar termo…" className="w-full min-w-0 bg-transparent text-sm text-white outline-none placeholder:text-slate-600"/></label><div className="divide-y divide-slate-800 rounded-xl border border-slate-800">{filteredGlossary.map((item) => <details key={item.term} name="academy-glossary" className="group p-4"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-slate-200">{item.term}<ChevronRight className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-90"/></summary><p className="mt-3 text-sm leading-relaxed text-slate-400">{item.desc}</p></details>)}{!filteredGlossary.length && <p role="status" className="p-5 text-sm text-slate-500">Nenhum termo encontrado. Tente outra palavra.</p>}</div></div>}
         </div>
 
-        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-800 px-5 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:px-7"><span className="text-[10px] text-slate-600">FinPulse · Aprender</span><button onClick={onClose} className="rounded-lg px-3 py-2 text-xs text-slate-400 hover:bg-white/5 hover:text-white">Voltar ao meu painel</button></footer>
-      </div>
-    </div>
+    </section>
   );
 };
