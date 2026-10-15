@@ -92,4 +92,12 @@ button:disabled { cursor: default; }
 .segmented-control button[aria-pressed="true"] { background: #28141b; color: #f12b58; }
 .market-preview > summary { list-style: none; }
 .market-preview > summary::-webkit-details-marker { display: none; }
+.skeleton-block { position: relative; overflow: hidden; background: #202023; }
+.skeleton-block::after { position: absolute; inset: 0; content: ''; background: linear-gradient(90deg, transparent, rgba(255,255,255,.045), transparent); transform: translateX(-100%); animation: skeleton-sweep 1.6s ease-in-out infinite; }
+@keyframes skeleton-sweep { to { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+@media (prefers-reduced-motion: reduce) { .skeleton-block::after { animation: none; } }
+
+.menu-content { animation: menu-appear .16s ease-out; }
+@keyframes menu-appear { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .menu-content { animation: none; } }
