@@ -35,8 +35,8 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
   isOpen,
   onClose,
   onOpenMovementModal,
-  selicRateAnnual = 13.75,
-  cdiRateAnnual = 13.65,
+  selicRateAnnual,
+  cdiRateAnnual,
 }) => {
   const [activeTab, setActiveTab] = useState<'trilha' | 'simulador' | 'glossario' | 'quiz'>('trilha');
   const [selectedModule, setSelectedModule] = useState<number>(0);
@@ -96,7 +96,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
                 <span>100% do CDI (O Padrão Inteligente)</span>
               </div>
               <p className="text-xs text-slate-400">
-                Acompanha a taxa básica de juros (Selic). Hoje rende aproximadamente <strong>{cdiRateAnnual.toFixed(2)}% ao ano</strong>.
+                Acompanha a taxa básica de juros (Selic). Hoje rende aproximadamente <strong>{cdiRateAnnual?.toFixed(2) ?? '—'}% ao ano</strong>.
                 Mesmo após descontar o imposto de renda, rende consideravelmente mais que a poupança, com a mesma segurança e liquidez imediata.
               </p>
             </div>
@@ -300,7 +300,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
               O que é o Open Finance Brasil?
             </h4>
             <p className="text-xs text-slate-300">
-              Criado pelo <strong>Banco Central do Brasil (Resolução BCB nº 1/2020)</strong>, o Open Finance estabelece que <strong>os dados bancários pertencem a você</strong>, e não à instituição financeira. Você tem o poder de autorizar o compartilhamento de saldos, extratos e posições entre seus bancos (Inter, Itaú, Nubank, Santander, etc.) de forma 100% criptografada.
+              Criado pelo <strong>Banco Central do Brasil (Resolução BCB nº 1/2020)</strong>, o Open Finance estabelece que <strong>os dados bancários pertencem a você</strong>, e não à instituição financeira. Você tem o poder de autorizar o compartilhamento de saldos, extratos e posições entre seus bancos (Inter, Itaú, Nubank, Santander, etc.) por meio do fluxo autorizado da instituição e da Pluggy.
             </p>
           </div>
 
@@ -309,7 +309,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
             <ol className="text-xs text-slate-400 space-y-2 list-decimal list-inside bg-slate-900 p-3.5 rounded-xl border border-slate-800">
               <li><strong>Solicitação de Consentimento:</strong> Você escolhe o banco e confirma os dados do seu titular (Nome e CPF).</li>
               <li><strong>Autorização no seu Banco:</strong> O banco recebe uma chamada segura e solicita sua confirmação (biometria ou token no aplicativo oficial).</li>
-              <li><strong>Sincronização Automática:</strong> Uma vez autorizado, o FinPulse conecta aos dados do seu banco para consultar seu saldo real e permitir que você movimente ou invista sem precisar digitar dados manuais.</li>
+              <li><strong>Sincronização Automática:</strong> Uma vez autorizado, o FinPulse conecta aos dados do seu banco para consultar os dados liberados. Este aplicativo não movimenta dinheiro nem executa investimentos.</li>
               <li><strong>Revogação a qualquer momento:</strong> Você tem o direito regulatório de cancelar o compartilhamento a qualquer instante.</li>
             </ol>
           </div>
@@ -318,17 +318,17 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
     }
   ];
 
-  // REAL COMPOUND INTEREST & ACCURATE TAX CALCULATION
+  // Illustrative compound interest calculation
   const calculateRealSimulation = () => {
-    let annualRate = 0.1365; // 100% CDI
+    let annualRate = (cdiRateAnnual || 0) / 100; // taxa oficial atual, sem projetar variação futura
     let isTaxFree = false;
 
     if (assetType === 'cdi115') {
-      annualRate = cdiRateAnnual * 0.01 * 1.15;
+      annualRate = (cdiRateAnnual || 0) * 0.01 * 1.15;
     } else if (assetType === 'tesouro_ipca') {
-      annualRate = 0.045 + 0.065; // Inflação esperada 4.5% + juro real 6.5% = 11%
+      annualRate = 0; // taxa IPCA+ varia por título e vencimento; sem cotação atual, não estimar
     } else if (assetType === 'poupanca') {
-      annualRate = 0.0617; // Poupança padrão Selic > 8.5%
+      annualRate = selicRateAnnual && selicRateAnnual > 8.5 ? 0.06 : 0; // aproximação 0,5% a.m.; TR não incluída
       isTaxFree = true;
     }
 
@@ -364,7 +364,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
     const passiveMonthlyIncome = netFinal * monthlyRate;
 
     // Compare with Traditional Poupança
-    const poupancaMonthlyRate = Math.pow(1 + 0.0617, 1 / 12) - 1;
+    const poupancaMonthlyRate = selicRateAnnual && selicRateAnnual > 8.5 ? Math.pow(1 + 0.06, 1 / 12) - 1 : 0;
     let poupancaBalance = initialAmount;
     for (let m = 1; m <= months; m++) {
       poupancaBalance = poupancaBalance * (1 + poupancaMonthlyRate) + monthlyContribution;
@@ -465,7 +465,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
       <div 
-        className="relative w-full max-w-4xl bg-[#0b101d] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[94vh] flex flex-col"
+        className="relative w-full max-w-4xl bg-[#101012] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[94vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header */}
@@ -522,7 +522,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
             }`}
           >
             <Calculator className="w-4 h-4" />
-            <span>Simulador Real de Juros Compostos & IR</span>
+            <span>Simulador de Juros Compostos (Didático)</span>
           </button>
 
           <button
@@ -663,10 +663,10 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
                 <div>
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
                     <Calculator className="w-4 h-4 text-emerald-400" />
-                    Simulador Oficial com Tabela Regressiva de IR e Benchmark Real
+                    Simulador didático com hipóteses simplificadas
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Veja na prática o poder do tempo e dos aportes mensais. Todos os cálculos usam fórmulas de matemática financeira real sem arredondamentos fictícios.
+                    Veja na prática o poder do tempo e dos aportes mensais. Estimativa didática: mantém uma taxa constante e aplica IR simplificado ao prazo total. Não reproduz cada aporte, produto, tarifa ou regra fiscal individual; não é previsão de retorno.
                   </p>
                 </div>
               </div>
@@ -763,7 +763,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
                         }`}
                       >
                         <div className="text-xs font-bold">100% do CDI</div>
-                        <span className="text-[10px] text-slate-500 font-mono">{cdiRateAnnual.toFixed(2)}% a.a.</span>
+                        <span className="text-[10px] text-slate-500 font-mono">{cdiRateAnnual?.toFixed(2) ?? '—'}% a.a.</span>
                       </button>
 
                       <button
@@ -775,7 +775,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
                         }`}
                       >
                         <div className="text-xs font-bold">115% do CDI</div>
-                        <span className="text-[10px] text-slate-500 font-mono">{(cdiRateAnnual * 1.15).toFixed(2)}% a.a.</span>
+                        <span className="text-[10px] text-slate-500 font-mono">{cdiRateAnnual ? (cdiRateAnnual * 1.15).toFixed(2) : '—'}% a.a.</span>
                       </button>
 
                       <button
@@ -787,7 +787,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
                         }`}
                       >
                         <div className="text-xs font-bold">Tesouro IPCA+</div>
-                        <span className="text-[10px] text-slate-500 font-mono">IPCA + 6,5% a.a.</span>
+                        <span className="text-[10px] text-slate-500 font-mono">Sem cotação atual</span>
                       </button>
 
                       <button
@@ -799,7 +799,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
                         }`}
                       >
                         <div className="text-xs font-bold">Poupança Antiga</div>
-                        <span className="text-[10px] text-slate-500 font-mono">6,17% a.a. (Isenta)</span>
+                        <span className="text-[10px] text-slate-500 font-mono">Taxa estimada; TR omitida</span>
                       </button>
                     </div>
                   </div>
@@ -809,7 +809,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
                 <div className="lg:col-span-7 bg-gradient-to-b from-slate-900 to-slate-950 p-5 sm:p-6 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-5">
                   <div>
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                      Resultado Líquido Final (Após IR)
+                      Resultado estimado (hipótese simplificada de IR)
                     </span>
                     <div className="text-3xl sm:text-4xl font-extrabold text-emerald-400 font-mono mt-1">
                       {formatBrl(simResult.netFinal)}

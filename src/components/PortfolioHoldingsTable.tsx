@@ -56,7 +56,7 @@ export const PortfolioHoldingsTable: React.FC<PortfolioHoldingsTableProps> = ({
   };
 
   return (
-    <div className="bg-gradient-to-b from-slate-900/90 to-[#0c121e] rounded-2xl border border-slate-800 p-5 sm:p-6 shadow-xl">
+    <div className="bg-gradient-to-b from-slate-900/90 to-[#101012] rounded-2xl border border-slate-800 p-5 sm:p-6 shadow-xl">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-slate-800">
         <div className="flex items-center space-x-2.5">
           <div className="p-2 rounded-xl bg-violet-500/10 text-violet-400 border border-violet-500/20">
@@ -65,15 +65,15 @@ export const PortfolioHoldingsTable: React.FC<PortfolioHoldingsTableProps> = ({
           <div>
             <div className="flex items-center space-x-2">
               <h3 className="text-base font-extrabold text-white">
-                Sua Carteira Real Open Finance
+                Posições cadastradas manualmente
               </h3>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
                 <Activity className="w-3 h-3 animate-pulse" />
-                Cotações B3 ao Vivo
+                Preços podem estar desatualizados
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              {holdings.length} posições reais custodiadas em instituições brasileiras
+              {holdings.length} posições informadas por você; não são importadas da Pluggy
             </p>
           </div>
         </div>
@@ -85,7 +85,7 @@ export const PortfolioHoldingsTable: React.FC<PortfolioHoldingsTableProps> = ({
             className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/15 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Adicionar Ativo Real</span>
+            <span>Cadastrar posição</span>
           </button>
         </div>
       </div>
@@ -233,7 +233,7 @@ export const PortfolioHoldingsTable: React.FC<PortfolioHoldingsTableProps> = ({
               onClick={onOpenAddModal}
               className="mt-2 text-xs text-emerald-400 hover:underline font-semibold"
             >
-              + Adicionar seu primeiro investimento real
+              + Cadastre sua primeira posição manualmente
             </button>
           </div>
         )}

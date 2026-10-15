@@ -31,10 +31,7 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({
   const [ticker, setTicker] = useState<string>('');
   const [name, setName] = useState<string>('');
   const [category, setCategory] = useState<AssetCategory>('acoes');
-  const [institution, setInstitution] = useState<{ id: string; name: string }>({
-    id: 'nubank',
-    name: 'Nubank (Nu Invest)',
-  });
+  const institution = { id: 'manual', name: 'Cadastro manual' };
   const [quantity, setQuantity] = useState<string>('100');
   const [price, setPrice] = useState<string>('');
   const [averagePrice, setAveragePrice] = useState<string>('');
@@ -108,14 +105,14 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({
       currentValue: Number(currentValue.toFixed(2)),
       totalReturnBrl: Number(totalReturnBrl.toFixed(2)),
       totalReturnPct: Number(totalReturnPct.toFixed(2)),
-      dailyReturnBrl: Number((currentValue * 0.0005).toFixed(2)),
-      dailyReturnPct: 0.05,
-      weeklyReturnBrl: Number((currentValue * 0.0025).toFixed(2)),
-      weeklyReturnPct: 0.25,
-      monthlyReturnBrl: Number((currentValue * 0.0108).toFixed(2)),
-      monthlyReturnPct: 1.08,
-      nextDividendBrl: category === 'fiis' ? Number((currentValue * 0.009).toFixed(2)) : 0,
-      isLiveSynced: true,
+      dailyReturnBrl: 0,
+      dailyReturnPct: 0,
+      weeklyReturnBrl: 0,
+      weeklyReturnPct: 0,
+      monthlyReturnBrl: 0,
+      monthlyReturnPct: 0,
+      nextDividendBrl: 0,
+      isLiveSynced: false,
     };
 
     onAddHolding(newHolding);
@@ -133,7 +130,7 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({
           const t = parts[0].toUpperCase();
           const q = parseFloat(parts[1]) || 1;
           const p = parseFloat(parts[2]) || 10;
-          const inst = parts[3] || 'Nubank';
+          const inst = parts[3] || 'Cadastro manual';
 
           const newHolding: PortfolioHolding = {
             id: `real-import-${Date.now()}-${Math.random()}`,
@@ -150,13 +147,13 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({
             currentValue: q * p,
             totalReturnBrl: 0,
             totalReturnPct: 0,
-            dailyReturnBrl: (q * p) * 0.0005,
-            dailyReturnPct: 0.05,
-            weeklyReturnBrl: (q * p) * 0.0025,
-            weeklyReturnPct: 0.25,
-            monthlyReturnBrl: (q * p) * 0.0108,
-            monthlyReturnPct: 1.08,
-            isLiveSynced: true,
+            dailyReturnBrl: 0,
+            dailyReturnPct: 0,
+            weeklyReturnBrl: 0,
+            weeklyReturnPct: 0,
+            monthlyReturnBrl: 0,
+            monthlyReturnPct: 0,
+            isLiveSynced: false,
           };
           onAddHolding(newHolding);
           count++;
@@ -174,7 +171,7 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md overflow-y-auto animate-fade-in">
       <div 
-        className="relative w-full max-w-xl bg-[#0c111d] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col"
+        className="relative w-full max-w-xl bg-[#101012] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -185,7 +182,7 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="text-base font-bold text-white">Adicionar Investimento Real</h2>
+                <h2 className="text-base font-bold text-white">Cadastrar posição manualmente</h2>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3" />
                   B3 & BACEN Conectados
@@ -270,37 +267,8 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({
                 />
               </div>
 
-              {/* Institution and Category */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 block mb-1">
-                    Instituição Custodiante:
-                  </label>
-                  <select
-                    value={institution.id}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      const names: Record<string, string> = {
-                        nubank: 'Nubank (Nu Invest)',
-                        itau: 'Itaú Íon',
-                        btg: 'BTG Pactual',
-                        xp: 'XP Investimentos',
-                        inter: 'Banco Inter',
-                        binance: 'Binance Web3',
-                      };
-                      setInstitution({ id, name: names[id] || id });
-                    }}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
-                  >
-                    <option value="nubank">Nubank (Nu Invest)</option>
-                    <option value="itau">Itaú Íon</option>
-                    <option value="btg">BTG Pactual</option>
-                    <option value="xp">XP Investimentos</option>
-                    <option value="inter">Banco Inter</option>
-                    <option value="binance">Binance Web3</option>
-                  </select>
-                </div>
-
+              {/* Category of manually entered position */}
+              <div className="grid grid-cols-1 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-slate-300 block mb-1">
                     Classe de Ativo:
@@ -392,7 +360,7 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({
                 rows={6}
                 value={importText}
                 onChange={(e) => setImportText(e.target.value)}
-                placeholder="Exemplo:&#10;BBAS3, 150, 24.29, Nubank&#10;HGLG11, 20, 161.40, BTG"
+                placeholder="Exemplo:&#10;BBAS3, 150, 24.29, (opcional) origem anotada&#10;HGLG11, 20, 161.40, BTG"
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500"
               />
 
@@ -419,7 +387,7 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({
               className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-500/20"
             >
               <Check className="w-4 h-4" />
-              <span>Salvar Investimento Real</span>
+              <span>Salvar posição</span>
             </button>
           ) : (
             <button

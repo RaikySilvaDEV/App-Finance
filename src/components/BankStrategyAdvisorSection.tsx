@@ -118,7 +118,7 @@ export const BankStrategyAdvisorSection: React.FC<BankStrategyAdvisorSectionProp
   };
 
   return (
-    <div className="bg-gradient-to-b from-slate-900/90 to-[#0c121e] rounded-2xl border border-slate-800 p-5 sm:p-7 shadow-xl space-y-6">
+    <div className="bg-gradient-to-b from-slate-900/90 to-[#101012] rounded-2xl border border-slate-800 p-5 sm:p-7 shadow-xl space-y-6">
       {/* Section Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-4 border-b border-slate-800">
         <div>
@@ -157,7 +157,7 @@ export const BankStrategyAdvisorSection: React.FC<BankStrategyAdvisorSectionProp
               className={`bg-slate-950/70 border rounded-xl p-4 sm:p-5 flex flex-col justify-between transition-all group ${
                 isConnected 
                   ? 'border-slate-800 hover:border-emerald-500/50' 
-                  : 'border-slate-800/90 hover:border-cyan-500/50 bg-[#090d16]'
+                  : 'border-slate-800/90 hover:border-cyan-500/50 bg-[#101012]'
               }`}
             >
               <div>

@@ -1,435 +1,89 @@
-import React, { useState } from 'react';
-import { 
-  TrendingUp, 
-  Calendar, 
-  Percent, 
-  ArrowUpRight, 
-  Sparkles, 
-  Clock, 
-  Coins, 
-  Layers, 
-  Info,
-  CheckCircle2
-} from 'lucide-react';
-import { PortfolioHolding } from '../types/finance';
-
-export type Timeframe = 'daily' | 'weekly' | 'monthly' | 'ytd';
-
-interface GainsPerformanceCardProps {
-  holdings: PortfolioHolding[];
-  isPrivateMode: boolean;
-  selectedTimeframe: Timeframe;
-  setSelectedTimeframe: (tf: Timeframe) => void;
-}
-
-export const GainsPerformanceCard: React.FC<GainsPerformanceCardProps> = ({
-  holdings,
-  isPrivateMode,
-  selectedTimeframe,
-  setSelectedTimeframe,
-}) => {
-  const [hoveredPoint, setHoveredPoint] = useState<{ label: string; value: number; diff: number } | null>(null);
-  const [showBenchmarkComparison, setShowBenchmarkComparison] = useState(true);
-
-  // Computations based on current holdings
-  const totalValue = holdings.reduce((acc, h) => acc + h.currentValue, 0);
-  const totalInvested = holdings.reduce((acc, h) => acc + h.totalInvested, 0);
-
-  // Aggregate gains for each timeframe with zero-safe math
-  const dailyGainBrl = holdings.reduce((acc, h) => acc + h.dailyReturnBrl, 0);
-  const dailyBase = totalValue - dailyGainBrl;
-  const dailyGainPct = dailyBase > 0 ? (dailyGainBrl / dailyBase) * 100 : 0;
-
-  const weeklyGainBrl = holdings.reduce((acc, h) => acc + h.weeklyReturnBrl, 0);
-  const weeklyBase = totalValue - weeklyGainBrl;
-  const weeklyGainPct = weeklyBase > 0 ? (weeklyGainBrl / weeklyBase) * 100 : 0;
-
-  const monthlyGainBrl = holdings.reduce((acc, h) => acc + h.monthlyReturnBrl, 0);
-  const monthlyBase = totalValue - monthlyGainBrl;
-  const monthlyGainPct = monthlyBase > 0 ? (monthlyGainBrl / monthlyBase) * 100 : 0;
-
-  const ytdGainBrl = holdings.reduce((acc, h) => acc + h.totalReturnBrl, 0);
-  const ytdGainPct = totalInvested > 0 ? (ytdGainBrl / totalInvested) * 100 : 0;
-
-  // Active metrics based on selected timeframe
-  let activeGainBrl = dailyGainBrl;
-  let activeGainPct = dailyGainPct;
-  let timeframeLabel = 'Hoje';
-  let timeframeSub = 'Ganhos diários consolidados (intradiário)';
-  let cdiComparison = '134% do CDI diário';
-
-  if (selectedTimeframe === 'weekly') {
-    activeGainBrl = weeklyGainBrl;
-    activeGainPct = weeklyGainPct;
-    timeframeLabel = 'Esta Semana';
-    timeframeSub = 'Segunda a Sexta (5 dias úteis)';
-    cdiComparison = '126% do CDI semanal';
-  } else if (selectedTimeframe === 'monthly') {
-    activeGainBrl = monthlyGainBrl;
-    activeGainPct = monthlyGainPct;
-    timeframeLabel = 'Este Mês';
-    timeframeSub = 'Rendimento acumulado no mês corrente';
-    cdiComparison = '138% do CDI mensal';
-  } else if (selectedTimeframe === 'ytd') {
-    activeGainBrl = ytdGainBrl;
-    activeGainPct = ytdGainPct;
-    timeframeLabel = 'Ano (YTD)';
-    timeframeSub = 'Rentabilidade acumulada em 2026';
-    cdiComparison = '142% do CDI anual';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Activity, CalendarDays, RefreshCw } from 'lucide-react';
+import { Asset, PortfolioHolding } from '../types/finance';
+interface HistoryPoint { timestamp: number; close: number; }
+interface HistoryResponse { points: HistoryPoint[]; currency?: string; }
+interface Props { holdings: PortfolioHolding[]; isPrivateMode: boolean; assets: Asset[]; }
+export const GainsPerformanceCard: React.FC<Props> = ({ holdings, isPrivateMode, assets }) => {
+  const totalValue = holdings.reduce((sum, holding) => sum + holding.currentValue, 0);
+  const invested = holdings.reduce((sum, holding) => sum + holding.totalInvested, 0);
+  const pnl = totalValue - invested;
+  const pnlPct = invested > 0 ? pnl / invested * 100 : 0;
+  const [ticker, setTicker] = useState(assets[0]?.ticker || '');
+  const [period, setPeriod] = useState<'week' | 'month'>('month');
+  const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [currencyCode, setCurrencyCode] = useState('BRL');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ left: 8, top: 8 });
+  useEffect(() => setHoveredIndex(null), [ticker, period, history]);
+  useEffect(() => { if (assets.length && !assets.some(asset => asset.ticker === ticker)) setTicker(assets[0].ticker); }, [assets, ticker]);
+  useEffect(() => {
+    if (!ticker) { setHistory([]); return; }
+    const controller = new AbortController();
+    setLoading(true); setError(null);
+    fetch(`/api/market/history/${encodeURIComponent(ticker)}`, { signal: controller.signal })
+      .then(async response => { const data: HistoryResponse & { error?: string } = await response.json(); if (!response.ok) throw new Error(data.error || 'Histórico indisponível.'); setCurrencyCode(data.currency || 'BRL'); return data.points; })
+      .then(points => setHistory(points || []))
+      .catch(reason => { if (reason.name !== 'AbortError') { setHistory([]); setError(reason.message || 'Falha ao obter histórico.'); } })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [ticker, refreshKey]);
+  const visiblePoints = useMemo(() => period === 'week' ? history.slice(-6) : history, [history, period]);
+  const width = 800, height = 270, padX = 38, padY = 26;
+  const prices = visiblePoints.map(point => point.close);
+  const minimum = Math.min(...prices), maximum = Math.max(...prices);
+  const spread = maximum - minimum || Math.max(maximum * 0.01, 1);
+  const x = (index: number) => padX + index * (width - padX * 2) / Math.max(visiblePoints.length - 1, 1);
+  function moveTooltip(event: React.PointerEvent<SVGSVGElement>) {
+    const svgBounds = event.currentTarget.getBoundingClientRect();
+    const containerBounds = event.currentTarget.parentElement!.getBoundingClientRect();
+    const position = (event.clientX - svgBounds.left) / svgBounds.width * width;
+    const index = Math.max(0, Math.min(visiblePoints.length - 1, Math.round((position - padX) / (width - 2 * padX) * (visiblePoints.length - 1))));
+    if (!visiblePoints[index]) return;
+    setHoveredIndex(index);
+    const pointX = svgBounds.left - containerBounds.left + x(index) / width * svgBounds.width;
+    const pointY = svgBounds.top - containerBounds.top + y(visiblePoints[index].close) / height * svgBounds.height;
+    setTooltipPosition({ left: Math.max(8, Math.min(containerBounds.width - 160, pointX - 65)), top: Math.max(8, Math.min(containerBounds.height - 65, pointY >= 70 ? pointY - 65 : pointY + 12)) });
   }
-
-  // Format currency helper
-  const formatBrl = (val: number) => {
-    if (isPrivateMode) return 'R$ ••••••';
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-  };
-
-  // Fixed Income daily yield estimate
-  const dailyFixedIncomeYield = holdings
-    .filter(h => h.category === 'renda_fixa')
-    .reduce((acc, h) => acc + h.dailyReturnBrl, 0);
-
-  // FII monthly dividends estimate
-  const monthlyFiiDividends = holdings
-    .filter(h => h.category === 'fiis')
-    .reduce((acc, h) => acc + (h.nextDividendBrl || 0), 0);
-
-  // Chart data generation based on timeframe
-  const getChartData = () => {
-    const base = totalValue - activeGainBrl;
-    if (selectedTimeframe === 'daily') {
-      return [
-        { label: '09:00', value: base + activeGainBrl * 0.05, cdi: base + activeGainBrl * 0.04 },
-        { label: '10:00', value: base + activeGainBrl * 0.18, cdi: base + activeGainBrl * 0.12 },
-        { label: '11:00', value: base + activeGainBrl * 0.28, cdi: base + activeGainBrl * 0.23 },
-        { label: '12:00', value: base + activeGainBrl * 0.42, cdi: base + activeGainBrl * 0.35 },
-        { label: '13:00', value: base + activeGainBrl * 0.50, cdi: base + activeGainBrl * 0.46 },
-        { label: '14:00', value: base + activeGainBrl * 0.65, cdi: base + activeGainBrl * 0.58 },
-        { label: '15:00', value: base + activeGainBrl * 0.79, cdi: base + activeGainBrl * 0.70 },
-        { label: '16:00', value: base + activeGainBrl * 0.91, cdi: base + activeGainBrl * 0.82 },
-        { label: '17:00 (Agora)', value: totalValue, cdi: base + activeGainBrl * 0.75 },
-      ];
-    } else if (selectedTimeframe === 'weekly') {
-      return [
-        { label: 'Seg', value: base + activeGainBrl * 0.15, cdi: base + activeGainBrl * 0.18 },
-        { label: 'Ter', value: base + activeGainBrl * 0.35, cdi: base + activeGainBrl * 0.38 },
-        { label: 'Qua', value: base + activeGainBrl * 0.58, cdi: base + activeGainBrl * 0.58 },
-        { label: 'Qui', value: base + activeGainBrl * 0.82, cdi: base + activeGainBrl * 0.78 },
-        { label: 'Sex (Hoje)', value: totalValue, cdi: base + activeGainBrl * 0.80 },
-      ];
-    } else if (selectedTimeframe === 'monthly') {
-      return [
-        { label: 'Sem 1', value: base + activeGainBrl * 0.22, cdi: base + activeGainBrl * 0.20 },
-        { label: 'Sem 2', value: base + activeGainBrl * 0.45, cdi: base + activeGainBrl * 0.43 },
-        { label: 'Sem 3', value: base + activeGainBrl * 0.74, cdi: base + activeGainBrl * 0.65 },
-        { label: 'Sem 4 (Atual)', value: totalValue, cdi: base + activeGainBrl * 0.76 },
-      ];
-    } else {
-      return [
-        { label: 'Jan', value: base + activeGainBrl * 0.08, cdi: base + activeGainBrl * 0.07 },
-        { label: 'Fev', value: base + activeGainBrl * 0.19, cdi: base + activeGainBrl * 0.15 },
-        { label: 'Mar', value: base + activeGainBrl * 0.31, cdi: base + activeGainBrl * 0.24 },
-        { label: 'Abr', value: base + activeGainBrl * 0.44, cdi: base + activeGainBrl * 0.34 },
-        { label: 'Mai', value: base + activeGainBrl * 0.56, cdi: base + activeGainBrl * 0.44 },
-        { label: 'Jun', value: base + activeGainBrl * 0.69, cdi: base + activeGainBrl * 0.55 },
-        { label: 'Jul', value: base + activeGainBrl * 0.78, cdi: base + activeGainBrl * 0.64 },
-        { label: 'Ago', value: base + activeGainBrl * 0.89, cdi: base + activeGainBrl * 0.74 },
-        { label: 'Set', value: base + activeGainBrl * 0.95, cdi: base + activeGainBrl * 0.83 },
-        { label: 'Out (Atual)', value: totalValue, cdi: base + activeGainBrl * 0.85 },
-      ];
-    }
-  };
-
-  const chartData = getChartData();
-  const minVal = Math.min(...chartData.map(d => Math.min(d.value, d.cdi))) * 0.998;
-  const maxVal = Math.max(...chartData.map(d => Math.max(d.value, d.cdi))) * 1.002;
-  const range = maxVal - minVal || 1;
-
-  const chartWidth = 720;
-  const chartHeight = 220;
-  const paddingX = 30;
-  const paddingY = 25;
-
-  const getX = (index: number) => paddingX + (index / (chartData.length - 1)) * (chartWidth - paddingX * 2);
-  const getY = (val: number) => chartHeight - paddingY - ((val - minVal) / range) * (chartHeight - paddingY * 2);
-
-  // Generate SVG path for portfolio
-  const portfolioPoints = chartData.map((d, i) => `${getX(i)},${getY(d.value)}`).join(' ');
-  const portfolioArea = `M ${getX(0)},${chartHeight - paddingY} ` +
-    chartData.map((d, i) => `L ${getX(i)},${getY(d.value)}`).join(' ') +
-    ` L ${getX(chartData.length - 1)},${chartHeight - paddingY} Z`;
-
-  // Generate SVG path for CDI benchmark
-  const cdiPoints = chartData.map((d, i) => `${getX(i)},${getY(d.cdi)}`).join(' ');
-
-  return (
-    <div className="bg-gradient-to-b from-slate-900/90 to-[#0e1422] rounded-2xl border border-slate-800 shadow-2xl overflow-hidden p-5 sm:p-7 transition-all">
-      {/* Top Header: Total Balance + Timeframe Tabs */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5 pb-6 border-b border-slate-800/80">
-        <div>
-          <div className="flex items-center space-x-2 text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
-            <span>Patrimônio Total Consolidado</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            <span className="text-emerald-400 normal-case font-medium">Open Finance em Tempo Real</span>
-          </div>
-          <div className="flex items-baseline space-x-3">
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
-              {formatBrl(totalValue)}
-            </h1>
-            <div className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold">
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>+{activeGainPct.toFixed(2)}%</span>
-            </div>
-          </div>
-          <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Ganho em {timeframeLabel}: </span>
-            <span className="font-bold text-emerald-400">+{formatBrl(activeGainBrl)}</span>
-            <span className="text-slate-500">•</span>
-            <span className="text-slate-300 font-medium">{cdiComparison}</span>
-          </p>
-        </div>
-
-        {/* Timeframe Selector Pills */}
-        <div className="flex items-center p-1 bg-slate-950/80 rounded-xl border border-slate-800 self-start lg:self-center">
-          <button
-            onClick={() => setSelectedTimeframe('daily')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-              selectedTimeframe === 'daily'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25 font-bold'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Clock className="w-3 h-3" />
-            Hoje (Diário)
-          </button>
-          <button
-            onClick={() => setSelectedTimeframe('weekly')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-              selectedTimeframe === 'weekly'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25 font-bold'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Calendar className="w-3 h-3" />
-            Esta Semana
-          </button>
-          <button
-            onClick={() => setSelectedTimeframe('monthly')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-              selectedTimeframe === 'monthly'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25 font-bold'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Percent className="w-3 h-3" />
-            Este Mês
-          </button>
-          <button
-            onClick={() => setSelectedTimeframe('ytd')}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-              selectedTimeframe === 'ytd'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/25 font-bold'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <TrendingUp className="w-3 h-3" />
-            Ano (YTD)
-          </button>
-        </div>
+  const y = (price: number) => height - padY - ((price - minimum) / spread) * (height - padY * 2);
+  const line = visiblePoints.map((point, index) => `${x(index)},${y(point.close)}`).join(' ');
+  const area = visiblePoints.length ? `M ${x(0)},${height-padY} ${visiblePoints.map((point,index) => `L ${x(index)},${y(point.close)}`).join(' ')} L ${x(visiblePoints.length-1)},${height-padY} Z` : '';
+  const latest = visiblePoints.at(-1)?.close;
+  const first = visiblePoints[0]?.close;
+  const change = latest !== undefined && first ? (latest / first - 1) * 100 : null;
+  const currency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: currencyCode }).format(value);
+  const formatDate = (timestamp: number) => new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(timestamp));
+  return <section className="overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-900/90 to-[#101012] p-4 shadow-2xl sm:p-6">
+    <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-800/80 pb-5">
+      <div><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400"><Activity className="h-4 w-4 text-emerald-400"/>Visão geral</div>
+        <div className="mt-2 flex flex-wrap items-baseline gap-3"><h2 className="text-3xl font-extrabold text-white">{isPrivateMode ? 'R$ ••••••' : currency(totalValue)}</h2><span className={`text-sm font-semibold ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{isPrivateMode ? '••••' : `${pnl >= 0 ? '+' : ''}${currency(pnl)} (${pnlPct.toFixed(2)}%)`}</span></div>
+        <p className="mt-1 text-xs text-slate-400">Posições manuais: valor estimado pelo último preço disponível e preço médio cadastrado.</p>
       </div>
-
-      {/* Chart Section */}
-      <div className="pt-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
-          <div className="flex items-center space-x-2">
-            <span className="text-sm font-bold text-white flex items-center gap-1.5">
-              Curva de Rentabilidade Contínua
-            </span>
-            <span className="text-xs text-slate-400">({timeframeSub})</span>
-          </div>
-
-          <div className="flex items-center space-x-4 text-xs">
-            <div className="flex items-center space-x-1.5">
-              <span className="w-3 h-3 rounded-sm bg-gradient-to-r from-emerald-400 to-teal-400"></span>
-              <span className="text-slate-300 font-medium">Sua Carteira Open Finance</span>
-            </div>
-            {showBenchmarkComparison && (
-              <div className="flex items-center space-x-1.5">
-                <span className="w-3 h-0.5 bg-slate-400 border border-dashed border-slate-400"></span>
-                <span className="text-slate-400">Referência CDI (100%)</span>
-              </div>
-            )}
-            <button
-              onClick={() => setShowBenchmarkComparison(!showBenchmarkComparison)}
-              className="text-cyan-400 hover:underline text-[11px] font-medium cursor-pointer"
-            >
-              {showBenchmarkComparison ? 'Ocultar CDI' : 'Comparar CDI'}
-            </button>
-          </div>
-        </div>
-
-        {/* SVG Interactive Chart */}
-        <div className="relative w-full h-[230px] bg-slate-950/60 rounded-xl p-2 border border-slate-800/70">
-          {/* Tooltip on hover */}
-          {hoveredPoint && (
-            <div className="absolute top-3 left-4 bg-slate-900/95 border border-emerald-500/30 rounded-lg p-2.5 shadow-xl text-xs z-10 pointer-events-none backdrop-blur-md">
-              <p className="text-slate-400 text-[11px] font-semibold">{hoveredPoint.label}</p>
-              <p className="text-white font-bold text-sm">{formatBrl(hoveredPoint.value)}</p>
-              <p className="text-emerald-400 font-medium text-[11px]">
-                {hoveredPoint.diff >= 0 ? '+' : ''}{formatBrl(hoveredPoint.diff)} ({((hoveredPoint.diff / totalInvested) * 100).toFixed(2)}%)
-              </p>
-            </div>
-          )}
-
-          <svg
-            viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-            className="w-full h-full overflow-visible"
-            preserveAspectRatio="none"
-          >
-            <defs>
-              <linearGradient id="gainsGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
-                <stop offset="70%" stopColor="#10b981" stopOpacity="0.05" />
-                <stop offset="100%" stopColor="#10b981" stopOpacity="0.00" />
-              </linearGradient>
-            </defs>
-
-            {/* Grid horizontal lines */}
-            {[0.25, 0.5, 0.75].map((pct, i) => (
-              <line
-                key={i}
-                x1={paddingX}
-                y1={paddingY + pct * (chartHeight - paddingY * 2)}
-                x2={chartWidth - paddingX}
-                y2={paddingY + pct * (chartHeight - paddingY * 2)}
-                stroke="#1e293b"
-                strokeDasharray="4 4"
-                strokeWidth="1"
-              />
-            ))}
-
-            {/* CDI Benchmark Line */}
-            {showBenchmarkComparison && (
-              <polyline
-                fill="none"
-                stroke="#64748b"
-                strokeWidth="1.5"
-                strokeDasharray="4 3"
-                points={cdiPoints}
-                opacity="0.8"
-              />
-            )}
-
-            {/* Area Fill */}
-            <path d={portfolioArea} fill="url(#gainsGradient)" />
-
-            {/* Portfolio Line */}
-            <polyline
-              fill="none"
-              stroke="#10b981"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              points={portfolioPoints}
-            />
-
-            {/* Data points with interactive hover circles */}
-            {chartData.map((d, i) => (
-              <g key={i}>
-                <circle
-                  cx={getX(i)}
-                  cy={getY(d.value)}
-                  r={i === chartData.length - 1 ? 5 : 3.5}
-                  className="fill-emerald-400 stroke-slate-950 stroke-2 hover:r-6 cursor-pointer transition-all"
-                  onMouseEnter={() => setHoveredPoint({ label: d.label, value: d.value, diff: d.value - (totalValue - activeGainBrl) })}
-                  onMouseLeave={() => setHoveredPoint(null)}
-                />
-                {/* Labels on x-axis */}
-                <text
-                  x={getX(i)}
-                  y={chartHeight - 6}
-                  textAnchor="middle"
-                  className="text-[10px] fill-slate-500 font-mono"
-                >
-                  {d.label}
-                </text>
-              </g>
-            ))}
-          </svg>
-        </div>
-      </div>
-
-      {/* 4 Pillars of Daily/Weekly/Monthly Gains Breakdown */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 pt-6">
-        {/* Card 1: Rendimento Diário de Renda Fixa */}
-        <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80 hover:border-emerald-500/40 transition-colors">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-            <span className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-emerald-400" />
-              Rendimento Diário Pós-Fixado
-            </span>
-          </div>
-          <p className="text-lg font-bold text-white">
-            +{formatBrl(dailyFixedIncomeYield)}
-            <span className="text-xs text-emerald-400 font-medium ml-1">/dia útil</span>
-          </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">
-            Tesouro Selic e CDBs rendendo juros compostos 24h
-          </p>
-        </div>
-
-        {/* Card 2: Proventos e Dividendos Mensais */}
-        <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80 hover:border-cyan-500/40 transition-colors">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-            <span className="flex items-center gap-1.5">
-              <Coins className="w-3.5 h-3.5 text-cyan-400" />
-              Proventos Mensais (FIIs)
-            </span>
-          </div>
-          <p className="text-lg font-bold text-white">
-            {formatBrl(monthlyFiiDividends)}
-            <span className="text-xs text-cyan-400 font-medium ml-1">isentos de IR</span>
-          </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">
-            Pingando todo mês na conta corrente via B3
-          </p>
-        </div>
-
-        {/* Card 3: Performance Semanal */}
-        <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80 hover:border-violet-500/40 transition-colors">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-            <span className="flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-violet-400" />
-              Ganhos desta Semana
-            </span>
-          </div>
-          <p className="text-lg font-bold text-white">
-            +{formatBrl(weeklyGainBrl)}
-            <span className="text-xs text-violet-400 font-medium ml-1">(+{weeklyGainPct.toFixed(2)}%)</span>
-          </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">
-            Consolidado de todas as instituições conectadas
-          </p>
-        </div>
-
-        {/* Card 4: Rentabilidade Mensal vs CDI */}
-        <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80 hover:border-amber-500/40 transition-colors">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-            <span className="flex items-center gap-1.5">
-              <Percent className="w-3.5 h-3.5 text-amber-400" />
-              Retorno no Mês Atual
-            </span>
-          </div>
-          <p className="text-lg font-bold text-white">
-            +{formatBrl(monthlyGainBrl)}
-            <span className="text-xs text-amber-400 font-medium ml-1">({monthlyGainPct.toFixed(2)}%)</span>
-          </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">
-            Superando a Poupança e 138% do CDI
-          </p>
-        </div>
-      </div>
+      <div className="flex items-center gap-2"><select aria-label="Ativo do gráfico" value={ticker} onChange={event => setTicker(event.target.value)} className="max-w-[180px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">{assets.map(asset => <option key={asset.ticker} value={asset.ticker}>{asset.ticker}</option>)}</select>
+        <button onClick={() => setRefreshKey(value => value + 1)} disabled={loading || !ticker} className="rounded-lg border border-slate-700 p-2 text-slate-300 hover:bg-slate-800 disabled:opacity-50" title="Atualizar histórico" aria-label="Atualizar histórico"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}/></button></div>
     </div>
-  );
+    <div className="pt-5"><div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-white">Histórico de cotação · {ticker || '—'}</h3><p className="mt-1 text-[11px] text-slate-500">Fechamentos diários de mercado, via Yahoo Finance. Não representa o patrimônio histórico da carteira.</p></div>
+      <div className="flex rounded-lg border border-slate-800 bg-slate-950 p-1">{(['week','month'] as const).map(value => <button key={value} onClick={() => setPeriod(value)} className={`rounded-md px-3 py-1.5 text-xs ${period === value ? 'bg-cyan-400 font-bold text-slate-950' : 'text-slate-400'}`}>{value === 'week' ? <><CalendarDays className="mr-1 inline h-3 w-3"/>1 semana</> : '1 mês'}</button>)}</div></div>
+      <div className="relative h-[240px] rounded-xl border border-slate-800/70 bg-slate-950/60 p-2 sm:h-[300px]">
+        {loading && <div className="absolute inset-0 z-10 grid place-items-center rounded-xl bg-slate-950/70 text-xs text-slate-400">Carregando histórico…</div>}
+        {error && <div role="status" className="absolute inset-0 z-10 grid place-items-center rounded-xl p-6 text-center text-sm text-slate-400">{error}</div>}
+        {!loading && !error && !visiblePoints.length && <div className="absolute inset-0 grid place-items-center p-6 text-center text-sm text-slate-400">{assets.length ? 'Sem histórico para este ativo.' : 'Cotações indisponíveis no momento.'}</div>}
+        {!!visiblePoints.length && <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full touch-pan-y" preserveAspectRatio="none" role="img" aria-label={`Histórico de cotação de ${ticker}`} onPointerMove={moveTooltip} onPointerDown={moveTooltip} onPointerLeave={(event) => { if (event.pointerType === 'mouse') setHoveredIndex(null); }}>
+          <defs><linearGradient id="marketChartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f12b58" stopOpacity=".28"/><stop offset="100%" stopColor="#f12b58" stopOpacity="0"/></linearGradient></defs>
+          {[0.2,0.4,0.6,0.8].map(value => <line key={value} x1={padX} x2={width-padX} y1={padY+(height-2*padY)*value} y2={padY+(height-2*padY)*value} stroke="#242427" strokeDasharray="4 5"/>)}
+          <path d={area} fill="url(#marketChartFill)"/><polyline points={line} fill="none" stroke="#f12b58" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>
+          {visiblePoints.map((point,index) => <circle key={point.timestamp} cx={x(index)} cy={y(point.close)} r={index === visiblePoints.length-1 ? 4 : 2.2} fill="#f12b58"><title>{formatDate(point.timestamp)} · {currency(point.close)}</title></circle>)}
+          {hoveredIndex !== null && visiblePoints[hoveredIndex] && <g pointerEvents="none"><line x1={x(hoveredIndex)} x2={x(hoveredIndex)} y1={padY} y2={height-padY} stroke="#929297" strokeDasharray="4 4"/><circle cx={x(hoveredIndex)} cy={y(visiblePoints[hoveredIndex].close)} r="5" fill="#f12b58" stroke="#0b0b0e" strokeWidth="2"/></g>}
+          {visiblePoints.filter((_,index) => index===0 || index===visiblePoints.length-1 || index===Math.floor(visiblePoints.length/2)).map(point => <text key={`label-${point.timestamp}`} x={x(visiblePoints.indexOf(point))} y={height-5} fill="#929297" fontSize="11" textAnchor="middle">{formatDate(point.timestamp)}</text>)}
+        </svg>}
+        {hoveredIndex !== null && visiblePoints[hoveredIndex] && !loading && !error && <div role="tooltip" className="pointer-events-none absolute z-20 min-w-32 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs shadow-xl" style={tooltipPosition}><p className="text-slate-400">{new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo' }).format(new Date(visiblePoints[hoveredIndex].timestamp))}</p><p className="mt-1 font-semibold text-white">{currency(visiblePoints[hoveredIndex].close)}</p></div>}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400"><span>{visiblePoints.length ? `${visiblePoints.length} pregões · ${formatDate(visiblePoints[0].timestamp)} a ${formatDate(visiblePoints.at(-1)!.timestamp)}` : 'Sem série disponível'}</span><span className={change !== null && change >= 0 ? 'font-semibold text-emerald-400' : 'font-semibold text-rose-400'}>{change === null ? '—' : `${change >= 0 ? '+' : ''}${change.toFixed(2)}% no período`}</span></div>
+    </div>
+  </section>;
 };
+
+

@@ -49,7 +49,7 @@ export const YieldGoalsCard: React.FC<YieldGoalsCardProps> = ({
     .slice(0, 2);
 
   return (
-    <div className="bg-gradient-to-br from-slate-900/90 to-[#0e1628] rounded-2xl border border-slate-800 p-5 sm:p-6 shadow-xl">
+    <div className="bg-gradient-to-br from-slate-900/90 to-[#101012] rounded-2xl border border-slate-800 p-5 sm:p-6 shadow-xl">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div className="flex items-center space-x-2.5">
           <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">

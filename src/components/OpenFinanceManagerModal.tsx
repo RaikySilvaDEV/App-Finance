@@ -55,7 +55,7 @@ export const OpenFinanceManagerModal: React.FC<OpenFinanceManagerModalProps> = (
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-md overflow-y-auto animate-fade-in">
       <div 
-        className="relative w-full max-w-3xl bg-[#0c111d] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col"
+        className="relative w-full max-w-3xl bg-[#101012] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -89,7 +89,7 @@ export const OpenFinanceManagerModal: React.FC<OpenFinanceManagerModalProps> = (
         {/* Modal Body */}
         <div className="p-5 sm:p-6 space-y-5 overflow-y-auto">
           {/* Summary Banner */}
-          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-[#0e1626] p-4 rounded-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-[#101012] p-4 rounded-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <span className="text-xs text-slate-400 block font-medium">Patrimônio Consolidado via Open Finance</span>
               <span className="text-2xl font-extrabold text-white mt-0.5 block font-mono">

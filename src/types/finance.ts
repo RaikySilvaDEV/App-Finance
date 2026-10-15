@@ -38,7 +38,10 @@ export interface RealIndicators {
 
 export interface BankAccount {
   id: string;
+  providerItemId?: string;
   bankName: string;
+  currencyCode?: string;
+  bankData?: { closingBalance?: number; automaticallyInvestedBalance?: number; overdraftContractedLimit?: number; overdraftUsedLimit?: number; hasReservedBalance?: boolean };
   bankCode: string; // e.g. "260" Nubank, "341" Itaú, "208" BTG, "077" Inter, "102" XP, "001" BB, "237" Bradesco
   accountType: 'corrente' | 'investimento' | 'poupanca';
   agency: string;
@@ -59,8 +62,13 @@ export interface BankAccount {
 
 export interface FinancialTransaction {
   id: string;
-  type: 'pix_transfer' | 'ted_transfer' | 'invest_aporte' | 'invest_resgate';
+  type: 'pix_transfer' | 'ted_transfer' | 'invest_aporte' | 'invest_resgate' | 'account_transaction';
   amount: number;
+  /** Direção informada pela instituição; ausente em movimentos locais antigos. */
+  direction?: 'debit' | 'credit';
+  /** Categoria original retornada pelo provedor bancário. */
+  category?: string;
+  currencyCode?: string;
   sourceAccountId: string;
   sourceAccountName: string;
   destinationAccountId?: string;
@@ -72,8 +80,8 @@ export interface FinancialTransaction {
   unitPrice?: number;
   timestamp: string;
   status: 'concluido' | 'processando' | 'falha';
-  endToEndId: string; // BACEN SPI E2E ID
-  autenticationCode: string;
+  endToEndId?: string;
+  autenticationCode?: string;
   description: string;
 }
 

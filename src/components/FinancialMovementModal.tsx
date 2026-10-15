@@ -232,7 +232,7 @@ Liquidado via Banco Central do Brasil.
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
       <div 
-        className="relative w-full max-w-2xl bg-[#0c111e] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[94vh] flex flex-col"
+        className="relative w-full max-w-2xl bg-[#101012] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[94vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
