@@ -17,7 +17,7 @@ export async function activatePluggySync() {
   await putRecords('__system__', [record('pluggy', 'integration', { ...current, token })]);
   const list = await pluggyRequest('/webhooks');
   const existing = (list.results || (Array.isArray(list) ? list : [])).find((row: any) => row.url === publicUrl && row.event === 'all');
-  const body = JSON.stringify({ url: publicUrl, event: 'all', headers: { 'X-Finpulse-Webhook': token } });
+  const body = JSON.stringify({ url: publicUrl, event: 'all', headers: { 'X-Finpulse-Webhook': token }, ...(existing ? { enabled: true } : {}) });
   const webhook = await pluggyRequest(existing ? `/webhooks/${existing.id}` : '/webhooks', { method: existing ? 'PATCH' : 'POST', body });
   await putRecords('__system__', [record('pluggy', 'integration', { token, id: webhook.id || existing?.id, activatedAt: new Date().toISOString() })]);
   webhookHealth = null;
