@@ -206,7 +206,7 @@ app.get('/api/open-finance/investment-transactions', async (req: Request, res: R
       totalPages = Number(data.totalPages) || 1;
       page += 1;
     } while (page <= totalPages && page <= 100);
-    res.json({ transactions });
+    res.json({ transactions, complete: page > totalPages });
   } catch (error: any) {
     res.status(503).json({ error: error.message || 'Não foi possível carregar as movimentações.' });
   }

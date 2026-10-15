@@ -37,6 +37,7 @@ import type { PlanningData } from './lib/planning';
 import { AlertSummary, MoneyAvailable, SyncStatus } from './components/DailyControl';
 import { BankBills } from './components/BankBills';
 import { useControlData } from './lib/useControlData';
+import { finiteValue } from './lib/productMapping';
 import { providerTransaction } from './lib/providerTransaction';
 import { useFinancialHistory } from './lib/useFinancialHistory';
 import { MainTab, Sidebar } from './components/Sidebar';
@@ -383,7 +384,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
     showToast('A compra de ativos não é executada por este aplicativo.');
   };
 
-  const visibleProviderInvestments = providerInvestments.filter((investment) => Number.isFinite(Number(investment.balance)) && Math.round(Number(investment.balance) * 100) !== 0);
+  const visibleProviderInvestments = providerInvestments.filter((investment) => finiteValue(investment.balance) == null || Math.round(Number(investment.balance) * 100) !== 0);
 
   const initialDataLoading = (!hasLoadedBankData && bankDataLoading) || (history.loading && history.allTransactions.length === 0 && pluggyItemIds.length > 0);
   const showDataSkeleton = menuTransitioning || (initialDataLoading && ['overview', 'accounts', 'assets', 'ledger', 'loans', 'planning'].includes(activeTab)) || (activeTab === 'market' && isSyncing && assets.length === 0);
@@ -473,7 +474,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
         </>)}
 
-        {activeTab === 'assets' && <ConnectedAssets section="investments" investments={visibleProviderInvestments} creditCards={[]} isPrivateMode={isPrivateMode} />}
+        {activeTab === 'assets' && <ConnectedAssets section="investments" accounts={bankAccounts} investments={visibleProviderInvestments} creditCards={[]} isPrivateMode={isPrivateMode} />}
 
         {activeTab === 'loans' && <><ManualLoansPanel data={planning} onChange={setPlanning} privateMode={isPrivateMode}/><LoansSection loans={loans} complete={loansComplete} unsupported={loansUnsupported} isPrivateMode={isPrivateMode} onRefresh={() => fetchBankAccounts()} /></>}
         {activeTab === 'connections' && <><SyncStatus data={controls.data} reload={controls.reload}/><ConnectionsSection itemIds={pluggyItemIds} onConnect={() => setIsOpenFinanceConsentOpen(true)} onRemove={(id) => { setPluggyItemIds((items) => items.filter((item) => item !== id)); showToast('Conexão removida do painel. A autorização no banco continua sendo gerenciada no Meu Pluggy.'); }}/></>}
