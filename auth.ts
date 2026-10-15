@@ -12,7 +12,9 @@ type SessionUser = Pick<UserRecord, 'id' | 'email' | 'state'>;
 
 const scrypt = promisify(scryptCallback);
 const dataDirectory = path.resolve(process.env.FINPULSE_DATA_DIR || 'data');
-const sql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
+const databaseUrl = [process.env.DATABASE_URL, process.env.DATABASE_URL_POOLED]
+  .map((value) => value?.trim()).find(Boolean);
+const sql = databaseUrl ? neon(databaseUrl) : null;
 let db: DatabaseSync | null = null;
 let schemaReady: Promise<void> | null = null;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -21,8 +23,8 @@ const lifetime = 7 * 24 * 60 * 60 * 1000;
 const attempts = new Map<string, { count: number; until: number }>();
 
 function databaseError() {
-  return process.env.VERCEL === '1' && !process.env.DATABASE_URL
-    ? 'Configure DATABASE_URL da Neon nas variáveis de ambiente da Vercel.'
+  return process.env.VERCEL === '1' && !databaseUrl
+    ? 'A conexão do banco não chegou a esta implantação. Configure DATABASE_URL ou DATABASE_URL_POOLED no ambiente Production do projeto app-finance e faça um novo deploy.'
     : 'Não foi possível acessar o banco de dados. Tente novamente.';
 }
 
@@ -168,7 +170,7 @@ export function installAuth(app: Express, validateItem: (id: string) => Promise<
       attempts.delete(key); await createSession(res, user.id); return res.json({ user: { id: user.id, email } });
     } catch {
       console.error('Falha ao autenticar usuário.');
-      return res.status(process.env.VERCEL === '1' && !process.env.DATABASE_URL ? 503 : 500).json({ error: databaseError() });
+      return res.status(process.env.VERCEL === '1' && !databaseUrl ? 503 : 500).json({ error: databaseError() });
     }
   });
   app.get('/api/auth/me', async (req, res) => {
@@ -177,7 +179,7 @@ export function installAuth(app: Express, validateItem: (id: string) => Promise<
       res.json({ user: user ? { id: user.id, email: user.email } : null });
     } catch {
       console.error('Falha ao consultar a sessão do usuário.');
-      res.status(process.env.VERCEL === '1' && !process.env.DATABASE_URL ? 503 : 500).json({ error: databaseError() });
+      res.status(process.env.VERCEL === '1' && !databaseUrl ? 503 : 500).json({ error: databaseError() });
     }
   });
   app.use('/api', async (req, res, next) => {
@@ -187,7 +189,7 @@ export function installAuth(app: Express, validateItem: (id: string) => Promise<
       res.locals.user = user; next();
     } catch {
       console.error('Falha ao consultar o banco de autenticação.');
-      res.status(process.env.VERCEL === '1' && !process.env.DATABASE_URL ? 503 : 500).json({ error: databaseError() });
+      res.status(process.env.VERCEL === '1' && !databaseUrl ? 503 : 500).json({ error: databaseError() });
     }
   });
   app.get('/api/user/state', (_req, res) => res.json(readState(res.locals.user)));

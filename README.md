@@ -39,7 +39,7 @@ O banco SQLite fica em `data/finance.sqlite`. Preserve a pasta `data` para mante
 O repositório inclui uma função serverless para as rotas da API. Como o sistema de arquivos da Vercel não é persistente, a implantação usa Neon PostgreSQL em vez do SQLite local:
 
 1. Crie um projeto PostgreSQL no [Neon](https://neon.tech/) e copie a string de conexão pooled (`DATABASE_URL`).
-2. Em **Vercel → Project → Settings → Environment Variables**, configure `DATABASE_URL`.
+2. Em **Vercel → Project → Settings → Environment Variables**, configure `DATABASE_URL` no ambiente **Production**. O nome alternativo `DATABASE_URL_POOLED` também é aceito. Alterações de variáveis só são aplicadas a um novo deploy.
 3. Para diagnósticos e pesquisa com IA, configure `AI_PROVIDER=openai` e `OPENAI_API_KEY`. `OPENAI_MODEL` é opcional e usa `gpt-4.1-mini` por padrão. Ollama só funciona no computador local.
 4. Para Open Finance, configure também `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET` com as credenciais da aplicação Pluggy.
 5. Habilite as variáveis nos ambientes desejados e faça um novo deploy.
