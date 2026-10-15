@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { BankAccount, FinancialTransaction } from '../types/finance';
 export type SavedSnapshot = { date: string; capturedAt: string; accounts: BankAccount[]; investments: any[]; creditCards: any[]; loans: any[] };
-export function useFinancialHistory(syncVersion: number, transactions: FinancialTransaction[], snapshot: Omit<SavedSnapshot, 'date' | 'capturedAt'>, complete: boolean) {
+export function useFinancialHistory(syncVersion: number, transactions: FinancialTransaction[], snapshot: Omit<SavedSnapshot, 'date' | 'capturedAt'>, complete: boolean, itemIds: string[]) {
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [archived, setArchived] = useState<FinancialTransaction[]>([]);
   const [snapshots, setSnapshots] = useState<SavedSnapshot[]>([]);
   const [error, setError] = useState('');
@@ -15,7 +16,7 @@ export function useFinancialHistory(syncVersion: number, transactions: Financial
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível carregar o histórico.');
       collected.push(...data.transactions); after = data.next || '';
-      if (!signal?.aborted) { setSnapshots(data.snapshots); setTotal(data.transactionCount); }
+      if (!signal?.aborted) { setDeletedIds(data.deletedIds || []); setSnapshots(data.snapshots); setTotal(data.transactionCount); }
     } while (after);
     if (!signal?.aborted) setArchived(collected);
   }
@@ -23,6 +24,13 @@ export function useFinancialHistory(syncVersion: number, transactions: Financial
     const controller = new AbortController();
     load(controller.signal).catch((reason) => { if (!controller.signal.aborted) setError(reason.message); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    const refresh = () => { if (!document.hidden) load(controller.signal).catch((reason) => { if (!controller.signal.aborted) setError(reason.message); }); };
+    const timer = setInterval(refresh, 60000);
+    window.addEventListener('focus', refresh);
+    return () => { controller.abort(); clearInterval(timer); window.removeEventListener('focus', refresh); };
   }, []);
   useEffect(() => {
     if (!syncVersion) return;
@@ -44,6 +52,8 @@ export function useFinancialHistory(syncVersion: number, transactions: Financial
     void persist();
     return () => { cancelled = true; };
   }, [syncVersion]);
-  const allTransactions = [...new Map([...archived, ...transactions].map((tx) => [tx.id, tx])).values()].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  const deleted = new Set(deletedIds);
+  // The server archive is canonical when background notifications have corrected a record.
+  const allTransactions = [...new Map([...transactions, ...archived].filter((tx) => !deleted.has(tx.id) && itemIds.includes(tx.providerItemId || '')).map((tx) => [tx.id, tx])).values()].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   return { allTransactions, snapshots, error, saving, loading, total };
 }

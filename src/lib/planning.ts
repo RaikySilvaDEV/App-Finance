@@ -9,7 +9,7 @@ export type Budget = { id: string; month: string; category: string; limit: numbe
 export type Bill = { id: string; title: string; bank: string; category: string; amount: number; dueDate: string; installments: number; paid: number[] };
 export type Goal = { id: string; name: string; target: number; saved: number; targetDate: string };
 export type ManualLoan = { id: string; bank: string; title: string; outstanding: number; installment: number; remaining: number; nextDue: string; alsoConnected: boolean; updatedAt: string };
-export type PlanningData = { budgets: Budget[]; bills: Bill[]; goals: Goal[]; manualLoans: ManualLoan[]; rules: CategoryRule[]; overrides: Record<string, MovementOverride> };
+export type PlanningData = { budgets: Budget[]; bills: Bill[]; goals: Goal[]; manualLoans: ManualLoan[]; rules: CategoryRule[]; overrides: Record<string, MovementOverride>; recurrenceDecisions?: Record<string, 'ignored' | 'confirmed'> };
 export const emptyPlanning = (): PlanningData => ({ budgets: [], bills: [], goals: [], manualLoans: [], rules: [], overrides: {} });
 export const normalizedText = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 export function brazilDay(value = new Date().toISOString()) {
@@ -73,5 +73,7 @@ export function validatePlanning(value: unknown): PlanningData {
   if (!data.manualLoans.every((row) => identity(row) && text(row.bank) && text(row.title) && amount(row.outstanding) && amount(row.installment) && Number.isInteger(row.remaining) && row.remaining >= 0 && row.remaining <= 1200 && date(row.nextDue, true) && typeof row.alsoConnected === 'boolean' && text(row.updatedAt, 40))) throw new Error('Empréstimo inválido.');
   if (!data.rules.every((row) => identity(row) && text(row.text, 100) && row.text.trim().length >= 3 && text(row.bank) && text(row.category) && row.category.trim().length > 0 && Object.hasOwn(natureLabels, row.nature))) throw new Error('Regra inválida.');
   if (!data.overrides || typeof data.overrides !== 'object' || Array.isArray(data.overrides) || Object.keys(data.overrides).length > 20000 || !Object.entries(data.overrides).every(([key, row]) => text(key, 100) && row && text(row.category) && row.category.trim().length > 0 && Object.hasOwn(natureLabels, row.nature))) throw new Error('Classificação inválida.');
-  return { budgets: data.budgets, bills: data.bills, goals: data.goals, manualLoans: data.manualLoans, rules: data.rules, overrides: data.overrides };
+  const decisions = data.recurrenceDecisions || {};
+  if (typeof decisions !== 'object' || Array.isArray(decisions) || Object.keys(decisions).length > 1000 || !Object.entries(decisions).every(([key, value]) => text(key, 500) && ['ignored', 'confirmed'].includes(value))) throw new Error('Recorrência inválida.');
+  return { budgets: data.budgets, bills: data.bills, goals: data.goals, manualLoans: data.manualLoans, rules: data.rules, overrides: data.overrides, recurrenceDecisions: decisions };
 }

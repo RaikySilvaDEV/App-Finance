@@ -3,6 +3,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { installAuth } from './auth.js';
+import { pluggyRequest } from './pluggy.js';
+import { readAccounts, readTransactions, readInvestments, readLoans } from './provider-data.js';
+import { installSync, installSyncUser } from './sync.js';
+import { putRecords, record } from './sync-store.js';
+import { providerTransaction } from './src/lib/providerTransaction.js';
 import { generateFinancialAnalysis } from './openai.js';
 import { localAiStatus, researchFinancialTopic, ensureLocalAiStarted, isLocalAiEnabled } from './local-ai.js';
 
@@ -24,7 +29,9 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '2mb' }));
+installSync(app);
 installAuth(app, async (id) => { await pluggyRequest(`/items/${id}`); }, async (id) => (await pluggyRequest(`/investments/${id}`)).itemId);
+installSyncUser(app);
 
 // Initialize server-side Gemini
 
@@ -119,219 +126,34 @@ async function fetchYahooQuote(symbol: string) {
 // READ-ONLY OPEN FINANCE VIA PLUGGY
 // -------------------------------------------------------------
 
-let pluggyApiKey: { value: string; expiresAt: number } | null = null;
-
-async function getPluggyApiKey(): Promise<string> {
-  if (pluggyApiKey && pluggyApiKey.expiresAt > Date.now()) return pluggyApiKey.value;
-
-  const clientId = process.env.PLUGGY_CLIENT_ID;
-  const clientSecret = process.env.PLUGGY_CLIENT_SECRET;
-  if (!clientId || !clientSecret) {
-    throw new Error('Configure PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET no .env.');
-  }
-
-  const response = await fetch('https://api.pluggy.ai/auth', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clientId, clientSecret }),
-  });
-  if (!response.ok) throw new Error(`Falha de autenticação Pluggy (HTTP ${response.status}).`);
-
-  const data = await response.json() as { apiKey?: string };
-  if (!data.apiKey) throw new Error('A Pluggy não retornou uma chave de API válida.');
-  pluggyApiKey = { value: data.apiKey, expiresAt: Date.now() + 110 * 60 * 1000 };
-  return data.apiKey;
-}
-
-async function pluggyRequest(pathname: string): Promise<any> {
-  const apiKey = await getPluggyApiKey();
-  const response = await fetch(`https://api.pluggy.ai${pathname}`, {
-    headers: { 'X-API-KEY': apiKey, 'Accept': 'application/json' },
-  });
-  if (!response.ok) throw new Error(`A Pluggy respondeu HTTP ${response.status}.`);
-  return response.json();
-}
-
 app.get('/api/open-finance/status', (_req: Request, res: Response) => {
   const configured = Boolean(process.env.PLUGGY_CLIENT_ID && process.env.PLUGGY_CLIENT_SECRET);
   res.json({ provider: 'Pluggy', configured, mode: 'read_only' });
 });
 
-app.get('/api/open-finance/accounts', async (req: Request, res: Response) => {
-  const itemIds = req.query.itemId;
-  const ids = (Array.isArray(itemIds) ? itemIds : itemIds ? [itemIds] : [])
-    .map(String).filter((itemId) => /^[0-9a-f-]{36}$/i.test(itemId));
-  if (ids.length === 0) return res.json({ accounts: [], totalCheckingBalance: 0, totalAccounts: 0, activeAccounts: 0 });
-
-  try {
-    const accounts: any[] = [];
-    const creditCards: any[] = [];
-    const unavailableItems: string[] = [];
-    for (const itemId of ids) {
-      try {
-      const [item, firstPage] = await Promise.all([
-        pluggyRequest(`/items/${encodeURIComponent(itemId)}`),
-        pluggyRequest(`/accounts?itemId=${encodeURIComponent(itemId)}&page=1&pageSize=100`),
-      ]);
-      const totalPages = Number(firstPage.totalPages) || 1;
-      const pages = await Promise.all(Array.from({ length: Math.max(0, totalPages - 1) }, (_, index) =>
-        pluggyRequest(`/accounts?itemId=${encodeURIComponent(itemId)}&page=${index + 2}&pageSize=100`)
-      ));
-      const connector = item.connector || {};
-      for (const account of [ ...(firstPage.results || []), ...pages.flatMap((page: any) => page.results || []) ]) {
-        if (account.type === 'CREDIT') {
-          creditCards.push({ id: account.id, name: account.marketingName || account.name || 'Cartão', number: String(account.number || '').slice(-4), currencyCode: account.currencyCode || 'BRL', balance: account.balance, creditData: account.creditData || {}, institution: connector.name });
-        }
-        if (account.type !== 'BANK') continue;
-        const rawNumber = String(account.number || '');
-        const institutionName = String(account.marketingName || account.name || connector.name || item.connectorName || 'Instituição conectada');
-        const normalizedInstitution = institutionName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-        const bankName = normalizedInstitution.includes('mercado pago') ? 'Mercado Pago'
-          : normalizedInstitution.includes('santander') ? 'Santander'
-          : normalizedInstitution.includes('nu pagamentos') || normalizedInstitution.includes('nubank') ? 'Nubank'
-          : normalizedInstitution.includes('itau') ? 'Itaú'
-          : /\bneon\b/.test(normalizedInstitution) ? 'Neon'
-          : institutionName;
-        accounts.push({
-          id: account.id,
-          providerItemId: itemId,
-          bankName,
-          currencyCode: account.currencyCode || 'BRL',
-          bankData: account.bankData || {},
-          bankCode: String(connector.id || ''),
-          accountType: account.subtype === 'SAVINGS_ACCOUNT' ? 'poupanca' : 'corrente',
-          agency: '',
-          accountNumber: rawNumber ? `••••${rawNumber.slice(-4)}` : '',
-          accountDigit: '',
-          cpfTitular: '',
-          nomeTitular: '',
-          balance: Number(account.balance) || 0,
-          availableForInvestment: Number(account.balance) || 0,
-          lastSync: account.updatedAt || account.createdAt || new Date().toISOString(),
-          connected: true,
-          brandColor: '#0891b2',
-          logo: '🏦',
-        });
-      }
-      } catch { unavailableItems.push(itemId); }
-    }
-    res.json({
-      accounts,
-      creditCards,
-      unavailableItems,
-      totalCheckingBalance: accounts.reduce((total, account) => total + account.balance, 0),
-      totalAccounts: accounts.length,
-      activeAccounts: accounts.length,
-    });
-  } catch (error: any) {
-    res.status(503).json({ error: error.message || 'Não foi possível carregar as contas da Pluggy.' });
-  }
+app.get('/api/open-finance/accounts', async (req, res) => {
+  const ids = (Array.isArray(req.query.itemId) ? req.query.itemId : req.query.itemId ? [req.query.itemId] : []).map(String).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  try { res.json(await readAccounts(ids)); } catch { res.status(503).json({ error: 'Não foi possível consultar os dados bancários.' }); }
 });
 
-app.get('/api/open-finance/transactions', async (req: Request, res: Response) => {
-  const itemIds = req.query.itemId;
-  const ids = (Array.isArray(itemIds) ? itemIds : itemIds ? [itemIds] : [])
-    .map(String).filter((itemId) => /^[0-9a-f-]{36}$/i.test(itemId));
-  if (ids.length === 0) return res.json({ transactions: [] });
-
+app.get('/api/open-finance/transactions', async (req, res) => {
+  const ids = (Array.isArray(req.query.itemId) ? req.query.itemId : req.query.itemId ? [req.query.itemId] : []).map(String).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
   try {
-    const transactions: any[] = [];
-    const unavailableItems: string[] = [];
-    const truncatedItems: string[] = [];
-    for (const itemId of ids) {
-      try {
-      const accountPage = await pluggyRequest(`/accounts?itemId=${encodeURIComponent(itemId)}&page=1&pageSize=100`);
-      const moreAccounts = await Promise.all(Array.from({ length: Math.max(0, Number(accountPage.totalPages || 1) - 1) }, (_, index) => pluggyRequest(`/accounts?itemId=${encodeURIComponent(itemId)}&page=${index + 2}&pageSize=100`)));
-      const itemAccounts = [...(accountPage.results || []), ...moreAccounts.flatMap((page: any) => page.results || [])];
-      const bankLabel = String(itemAccounts.find((account: any) => account.type === 'BANK')?.marketingName || itemAccounts.find((account: any) => account.type === 'BANK')?.name || 'Conta conectada');
-      const normalized = bankLabel.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-      const providerBankName = /nubank|nu pagamentos|nu financeira/.test(normalized) ? 'Nubank' : normalized.includes('itau') ? 'Itaú' : normalized.includes('santander') ? 'Santander' : normalized.includes('mercado pago') ? 'Mercado Pago' : normalized.includes('neon') ? 'Neon' : bankLabel;
-      for (const account of itemAccounts) {
-        let next: string | null = `/v2/transactions?accountId=${encodeURIComponent(account.id)}`;
-        let pagesRead = 0;
-        while (next && pagesRead < 100) {
-          const page = await pluggyRequest(next);
-          transactions.push(...(page.results || []).map((transaction: any) => ({
-            ...transaction,
-            providerAccountName: account.marketingName || account.name || 'Conta conectada',
-            providerAccountType: account.type,
-            providerBankName,
-            providerItemId: itemId,
-          })));
-          if (page.next) {
-            // Pluggy returns a query string (for example, ?accountId=…&after=…);
-            // keep it on the v2 endpoint instead of requesting the API root.
-            const nextUrl = new URL(String(page.next), 'https://api.pluggy.ai/v2/transactions');
-            if (nextUrl.origin !== 'https://api.pluggy.ai' || nextUrl.pathname !== '/v2/transactions') {
-              throw new Error('A Pluggy retornou um cursor de paginação inválido.');
-            }
-            next = `${nextUrl.pathname}${nextUrl.search}`;
-          } else {
-            next = null;
-          }
-          pagesRead += 1;
-        }
-        if (next) truncatedItems.push(itemId);
-      }
-      } catch { unavailableItems.push(itemId); }
-    }
-    res.json({ transactions, unavailableItems, truncatedItems, complete: unavailableItems.length === 0 && truncatedItems.length === 0 });
-  } catch (error: any) {
-    res.status(503).json({ error: error.message || 'Não foi possível carregar as transações da Pluggy.' });
-  }
+    const started = Date.now();
+    const data = await readTransactions(ids);
+    await putRecords(res.locals.user.id, data.transactions.map((tx: any) => record(`tx:${tx.id}`, 'transaction', providerTransaction(tx), started)));
+    res.json(data);
+  } catch { res.status(503).json({ error: 'Não foi possível consultar os dados bancários.' }); }
 });
 
-app.get('/api/open-finance/investments', async (req: Request, res: Response) => {
-  const itemIds = req.query.itemId;
-  const ids = (Array.isArray(itemIds) ? itemIds : itemIds ? [itemIds] : [])
-    .map(String).filter((itemId) => /^[0-9a-f-]{36}$/i.test(itemId));
-  if (ids.length === 0) return res.json({ investments: [] });
-  try {
-    const investments: any[] = [];
-    const unavailableItems: string[] = [];
-    for (const itemId of ids) {
-      try {
-      const firstPage = await pluggyRequest(`/investments?itemId=${encodeURIComponent(itemId)}&page=1&pageSize=100`);
-      const pages = await Promise.all(Array.from({ length: Math.max(0, (Number(firstPage.totalPages) || 1) - 1) }, (_, index) =>
-        pluggyRequest(`/investments?itemId=${encodeURIComponent(itemId)}&page=${index + 2}&pageSize=100`)
-      ));
-      investments.push(...(firstPage.results || []), ...pages.flatMap((page: any) => page.results || []));
-      } catch { unavailableItems.push(itemId); }
-    }
-    res.json({ investments, unavailableItems, complete: unavailableItems.length === 0 });
-  } catch (error: any) {
-    res.status(503).json({ error: error.message || 'Não foi possível carregar os investimentos da Pluggy.' });
-  }
+app.get('/api/open-finance/investments', async (req, res) => {
+  const ids = (Array.isArray(req.query.itemId) ? req.query.itemId : req.query.itemId ? [req.query.itemId] : []).map(String).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  try { res.json(await readInvestments(ids)); } catch { res.status(503).json({ error: 'Não foi possível consultar os dados bancários.' }); }
 });
 
-app.get('/api/open-finance/loans', async (req: Request, res: Response) => {
-  const values = req.query.itemId;
-  const ids = (Array.isArray(values) ? values : values ? [values] : []).map(String).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
-  const loans: any[] = [];
-  const unavailableItems: string[] = [];
-  const unsupportedItems: string[] = [];
-  for (const itemId of ids) {
-    try {
-      const item = await pluggyRequest(`/items/${itemId}`);
-      if (Array.isArray(item.connector?.products) && !item.connector.products.includes('LOANS')) {
-        unsupportedItems.push(itemId);
-        unavailableItems.push(itemId);
-        continue;
-      }
-      const collected: any[] = [];
-      let page = 1;
-      let totalPages = 1;
-      do {
-        const result = await pluggyRequest(`/loans?itemId=${itemId}&page=${page}&pageSize=100`);
-        collected.push(...(result.results || []));
-        totalPages = Number(result.totalPages) || 1;
-        page += 1;
-      } while (page <= totalPages && page <= 100);
-      if (page <= totalPages) unavailableItems.push(itemId);
-      loans.push(...collected.map((loan: any) => ({ ...loan, institution: item.connector?.name || 'Instituição conectada' })));
-    } catch { unavailableItems.push(itemId); }
-  }
-  res.json({ loans, complete: ids.length > 0 && unavailableItems.length === 0, unavailableItems, unsupportedItems });
+app.get('/api/open-finance/loans', async (req, res) => {
+  const ids = (Array.isArray(req.query.itemId) ? req.query.itemId : req.query.itemId ? [req.query.itemId] : []).map(String).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  try { res.json(await readLoans(ids)); } catch { res.status(503).json({ error: 'Não foi possível consultar os dados bancários.' }); }
 });
 
 app.get('/api/open-finance/connections', async (req, res) => {
@@ -345,6 +167,26 @@ app.get('/api/open-finance/connections', async (req, res) => {
     } catch { return { id, status: 'UNAVAILABLE', institution: 'Conexão indisponível', products: [] }; }
   }));
   res.json({ connections });
+});
+
+app.get('/api/open-finance/bills', async (req, res) => {
+  const ids = (Array.isArray(req.query.itemId) ? req.query.itemId : req.query.itemId ? [req.query.itemId] : []).map(String).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  try {
+    const { creditCards, unavailableItems } = await readAccounts(ids);
+    const bills: any[] = []; let unavailable = unavailableItems?.length || 0;
+    await Promise.all(creditCards.map(async (card) => {
+      try {
+        let page = 1, total = 1;
+        do {
+          const result = await pluggyRequest(`/bills?accountId=${encodeURIComponent(card.id)}&page=${page}&pageSize=100`);
+          bills.push(...(result.results || []).map((bill: any) => ({ ...bill, bank: card.name, accountId: card.id, providerItemId: card.providerItemId })));
+          total = Number(result.totalPages) || 1; page++;
+        } while (page <= total && page <= 100);
+        if (page <= total) unavailable++;
+      } catch { unavailable++; }
+    }));
+    res.json({ bills: [...new Map(bills.map((bill) => [bill.id, bill])).values()].sort((a, b) => String(b.dueDate).localeCompare(String(a.dueDate))), unavailable });
+  } catch { res.status(503).json({ error: 'Não foi possível consultar as faturas.' }); }
 });
 
 app.get('/api/open-finance/investment-transactions', async (req: Request, res: Response) => {

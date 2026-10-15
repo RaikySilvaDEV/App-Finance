@@ -59,6 +59,8 @@ async function ensureDatabase() {
   await schemaReady;
 }
 
+export const financeStorage = { ensure: ensureDatabase, sql, local: localDatabase };
+
 async function userFor(req: Request): Promise<SessionUser | null> {
   const token = String(req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1);
   if (!token) return null;

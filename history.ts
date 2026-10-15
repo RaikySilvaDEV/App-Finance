@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import { brazilDay } from './src/lib/planning.js';
+import { records } from './sync-store.js';
 
 export function installHistory(app: Express, storage: { ensure: () => Promise<void>; sql: any; local: () => any }) {
   app.get('/api/user/history', async (req, res) => {
@@ -19,7 +20,8 @@ export function installHistory(app: Express, storage: { ensure: () => Promise<vo
         counts = [db.prepare("SELECT COUNT(*) AS total FROM financial_history WHERE user_id=? AND kind='transaction'").get(userId)];
       }
       const page = rows.slice(0, 500);
-      res.json({ transactions: page.map((row) => JSON.parse(row.payload)), next: rows.length > 500 ? page[499].record_id : null, transactionCount: Number(counts[0]?.total || 0), snapshots: snapshots.map((row) => ({ ...JSON.parse(row.payload), capturedAt: new Date(Number(row.observed_at)).toISOString() })) });
+      const deleted = await records(userId, 'deleted');
+      res.json({ deletedIds: deleted.map((row) => JSON.parse(row.payload).id), transactions: page.map((row) => JSON.parse(row.payload)), next: rows.length > 500 ? page[499].record_id : null, transactionCount: Number(counts[0]?.total || 0), snapshots: snapshots.map((row) => ({ ...JSON.parse(row.payload), capturedAt: new Date(Number(row.observed_at)).toISOString() })) });
     } catch { res.status(503).json({ error: 'Não foi possível carregar o histórico salvo.' }); }
   });
   app.post('/api/user/history', async (req, res) => {
@@ -41,12 +43,12 @@ export function installHistory(app: Express, storage: { ensure: () => Promise<vo
       }
       await storage.ensure();
       if (records.length && storage.sql) {
-        await storage.sql`INSERT INTO financial_history (user_id,record_id,kind,payload,observed_at) SELECT ${userId},record_id,kind,payload,observed_at FROM jsonb_to_recordset(${JSON.stringify(records)}::jsonb) AS x(record_id TEXT,kind TEXT,payload TEXT,observed_at BIGINT) ON CONFLICT (user_id,record_id) DO UPDATE SET payload=EXCLUDED.payload,observed_at=EXCLUDED.observed_at`;
+        await storage.sql`INSERT INTO financial_history (user_id,record_id,kind,payload,observed_at) SELECT ${userId},record_id,kind,payload,observed_at FROM jsonb_to_recordset(${JSON.stringify(records)}::jsonb) AS x(record_id TEXT,kind TEXT,payload TEXT,observed_at BIGINT) ON CONFLICT (user_id,record_id) DO UPDATE SET payload=EXCLUDED.payload,observed_at=EXCLUDED.observed_at WHERE financial_history.kind='snapshot'`;
       } else if (records.length) {
         const db = storage.local();
         db.exec('BEGIN IMMEDIATE');
         try {
-          const insert = db.prepare('INSERT INTO financial_history (user_id,record_id,kind,payload,observed_at) VALUES (?,?,?,?,?) ON CONFLICT (user_id,record_id) DO UPDATE SET payload=excluded.payload,observed_at=excluded.observed_at');
+          const insert = db.prepare("INSERT INTO financial_history (user_id,record_id,kind,payload,observed_at) VALUES (?,?,?,?,?) ON CONFLICT (user_id,record_id) DO UPDATE SET payload=excluded.payload,observed_at=excluded.observed_at WHERE financial_history.kind='snapshot'");
           for (const row of records) insert.run(userId, row.record_id, row.kind, row.payload, row.observed_at);
           db.exec('COMMIT');
         } catch (error) { db.exec('ROLLBACK'); throw error; }

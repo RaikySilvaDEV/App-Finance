@@ -37,7 +37,21 @@ O gráfico **Evolução do saldo** usa consultas diárias salvas quando há pelo
 
 O consumo exclui transferências identificadas, pagamentos de fatura, aplicações, resgates e empréstimos. Um PIX sem identificação fica como transferência a revisar: confirme se é compra ou transferência própria. A identificação automática de pares é uma sugestão baseada em descrição, moeda, data e valor; verifique antes de usar como conciliação definitiva. Dados brutos do provedor são preservados no histórico; correções ficam separadas no planejamento.
 
-O histórico é guardado na tabela `financial_history`, isolado por usuário, no mesmo SQLite/PostgreSQL da conta. Ele começa nas consultas realizadas após a atualização; não existe coleta diária quando o aplicativo está fechado. Falhas parciais de sincronização são informadas e não geram um retrato completo fictício do dia.
+O histórico é guardado na tabela `financial_history`, isolado por usuário, no mesmo SQLite/PostgreSQL da conta. Após ativar as notificações, o servidor salva atualizações recebidas da Pluggy mesmo com o aplicativo fechado. Falhas parciais de sincronização são informadas e não geram um retrato completo fictício do dia.
+
+### Controle diário e sincronização
+
+- **Visão geral**: saldo em contas, compromissos manuais até o fim do mês e diferença estimada. Investimentos, cartões e contratos conectados continuam separados. A diferença é parcial; não representa automaticamente dinheiro livre para investir.
+- **Planejamento → Avisos**: vencimentos em até sete dias, pagamentos manuais ainda não confirmados, orçamento em 90% ou acima do limite e conexões sem atualização há mais de 48 horas. Os avisos são exibidos no aplicativo, sem envio de e-mail ou notificações push.
+- **Recorrências**: detecção local sobre o histórico, sem contratar uma API de inteligência. Exige ao menos três ocorrências, uma por mês, intervalos de 25 a 35 dias e valores com variação de até 10% da média. Compras parceladas são excluídas. A próxima data é uma estimativa; o usuário confirma valor, vencimento e quantidade de meses antes de cadastrar uma conta. Confirmações e sugestões ignoradas são salvas na conta.
+- **Parcelas do cartão**: mostra número da parcela e total quando a instituição retorna `creditCardMetadata`. Datas são as dos lançamentos; não se inventam vencimentos nem parcelas ausentes. Lançamento confirmado não comprova pagamento.
+- **Contas e cartões → Faturas**: consulta `/bills` por cartão, com vencimento, total, mínimo, encargos e pagamentos conforme fornecidos. Ausência de dados ou falta de cobertura não significa dívida zero. Pagamentos registrados podem se referir ao ciclo anterior.
+
+Para ativar notificações: publique primeiro o código na Vercel, usando o mesmo banco Neon e as mesmas credenciais Pluggy. Em **Conexões**, use **Ativar atualização automática**, ou execute `npm run sync:activate` no ambiente autorizado com esse mesmo banco. O comando registra um webhook para `https://app-finance-ruby-one.vercel.app/api/integrations/pluggy` e faz a sincronização inicial. Se mudar de domínio, ajuste a constante `publicUrl` em `sync.ts` antes de registrar novamente. A URL precisa ser pública, HTTPS e acessível sem proteção de implantação.
+
+Um segredo aleatório é guardado no banco e enviado apenas no cabeçalho personalizado cadastrado na Pluggy. Eventos sem o segredo são rejeitados; itens não associados a usuários são ignorados. As entregas usam identificador de evento e uma reserva persistente para repetição segura. O servidor só confirma após salvar; falhas retornam HTTP 503 para permitir reenvio pela Pluggy. Se as tentativas do provedor forem esgotadas, é necessário investigar a conexão e sincronizar novamente. Exclusões informadas pelo provedor geram registros de remoção, impedindo que um navegador antigo restaure a transação. A ausência em uma consulta não é tratada como exclusão, pois o banco pode limitar o histórico.
+
+O MeuPluggy pessoal continua limitado à atualização diária do provedor. A integração recebe alterações; não força uma atualização bancária fora desse ciclo.
 
 ### Dados dos empréstimos Pluggy
 

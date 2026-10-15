@@ -61,6 +61,7 @@ export interface BankAccount {
 }
 
 export interface FinancialTransaction {
+  creditCardMetadata?: { installmentNumber?: number; totalInstallments?: number; totalAmount?: number; purchaseDate?: string; billId?: string; cardNumber?: string };
   sourceAccountType?: 'BANK' | 'CREDIT';
   providerItemId?: string;
   id: string;
