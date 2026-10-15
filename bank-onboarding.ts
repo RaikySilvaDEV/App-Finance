@@ -7,9 +7,10 @@ export async function authorizeConnection(itemId: string, user: { id: string; em
   const owned = await ownedConnections(user.id);
   if (owned.includes(itemId)) return;
   const item = await pluggyRequest(`/items/${itemId}`);
+  if (item.connector?.isSandbox) throw new Error('Conecte uma conta real pelo MeuPluggy.');
   if (businessConnectionsEnabled()) {
     if (item.clientUserId !== user.id || item.connector?.name === 'MeuPluggy' || item.connector?.isSandbox) throw new Error('Conexão não pertence à sua conta.');
-  } else if (process.env.PLUGGY_CONNECTION_MODE === 'business' || !(await personalOwner(user))) {
+  } else if (process.env.PLUGGY_CONNECTION_MODE === 'business' || item.connector?.name !== 'MeuPluggy' || !(await personalOwner(user))) {
     throw new Error('A conexão de bancos para novos usuários ainda não está habilitada.');
   }
   await reserveConnection(itemId, user.id);
@@ -17,34 +18,37 @@ export async function authorizeConnection(itemId: string, user: { id: string; em
 
 /** Bind newly created provider items only using identity read from the provider. */
 export async function attachProviderConnection(itemId: string) {
-  if (!businessConnectionsEnabled()) return;
   const item = await pluggyRequest(`/items/${itemId}`);
   const userId = item.clientUserId;
-  if (typeof userId !== 'string' || !/^[a-f0-9]{32}$/.test(userId) || item.connector?.name === 'MeuPluggy' || item.connector?.isSandbox) return;
+  if (typeof userId !== 'string' || !/^[a-f0-9]{32}$/.test(userId) || item.connector?.isSandbox) return;
   await financeStorage.ensure();
-  const rows = financeStorage.sql ? await financeStorage.sql`SELECT id FROM users WHERE id=${userId}` : financeStorage.local().prepare('SELECT id FROM users WHERE id=?').all(userId);
-  if (rows.length) await appendUserConnection(userId, itemId);
+  const rows = financeStorage.sql ? await financeStorage.sql`SELECT id,email FROM users WHERE id=${userId}` : financeStorage.local().prepare('SELECT id,email FROM users WHERE id=?').all(userId);
+  if (!rows.length) return;
+  if (businessConnectionsEnabled()) { if (item.connector?.name === 'MeuPluggy') return; }
+  else if (process.env.PLUGGY_CONNECTION_MODE === 'business' || item.connector?.name !== 'MeuPluggy' || !(await personalOwner(rows[0] as { id: string; email: string }))) return;
+  await appendUserConnection(userId, itemId);
 }
 
 export function installBankOnboarding(app: Express) {
   app.post('/api/open-finance/connect-token', async (req, res) => {
-    if (!businessConnectionsEnabled()) return res.status(503).json({ error: 'Conexão direta de bancos aguardando habilitação da aplicação.' });
     if (!process.env.PLUGGY_CLIENT_ID || !process.env.PLUGGY_CLIENT_SECRET) return res.status(503).json({ error: 'Conexão bancária indisponível no momento.' });
     try {
+      const personal = !businessConnectionsEnabled();
+      if (personal && (process.env.PLUGGY_CONNECTION_MODE === 'business' || !(await personalOwner(res.locals.user)))) return res.status(403).json({ error: 'A conexão de bancos para novos usuários aguarda habilitação.' });
       const userId = res.locals.user.id;
       const itemId = req.body?.itemId;
       if (itemId && (typeof itemId !== 'string' || !(await ownedConnections(userId)).includes(itemId) || !JSON.parse(res.locals.user.state || '{}').itemIds?.includes(itemId))) return res.status(403).json({ error: 'Conexão não pertence à sua conta.' });
       const connectorIds: number[] = [];
       for (let page = 1; ; page++) {
         const list = await pluggyRequest(`/connectors?countries=BR&sandbox=false&page=${page}`);
-        for (const connector of list.results || []) if (!connector.isSandbox && connector.name !== 'MeuPluggy' && connector.type === 'PERSONAL_BANK') connectorIds.push(connector.id);
+        for (const connector of list.results || []) if (!connector.isSandbox && (personal ? connector.name === 'MeuPluggy' : connector.name !== 'MeuPluggy' && connector.type === 'PERSONAL_BANK')) connectorIds.push(connector.id);
         if (page >= (list.totalPages || 1)) break;
         if (page >= 20) throw new Error('Lista de bancos incompleta.');
       }
-      if (!connectorIds.length) throw new Error('Nenhum banco disponível.');
+      if (!connectorIds.length) return res.status(503).json({ error: personal ? 'O conector MeuPluggy não está disponível nesta aplicação. Ative-o em Customization → Connectors no Dashboard ou use a importação por identificador.' : 'Nenhum banco disponível nesta aplicação.' });
       const result = await pluggyRequest('/connect_token', { method: 'POST', body: JSON.stringify({ ...(itemId ? { itemId } : {}), options: { clientUserId: userId, avoidDuplicates: false } }) });
       if (!result.accessToken) throw new Error();
       res.json({ connectToken: result.accessToken, connectorIds });
-    } catch { res.status(503).json({ error: 'Não foi possível iniciar a conexão com o banco. Tente novamente.' }); }
+    } catch { res.status(503).json({ error: 'Não foi possível abrir o conector nesta aplicação. Para uso pessoal, use a autorização no Meu Pluggy e a importação pelo Dashboard abaixo.' }); }
   });
 }

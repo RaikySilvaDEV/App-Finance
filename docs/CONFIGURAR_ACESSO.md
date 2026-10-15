@@ -31,6 +31,16 @@ Reinicie o servidor local e faça novo deploy após configurar. Acesse pelo ende
 
 ## Pluggy para vários usuários
 
+### Uso pessoal com dados reais
+
+Em **Conexões → Adicionar conexão**, o responsável encontra duas etapas: autorizar o banco no Meu Pluggy e abrir o conector MeuPluggy dentro do FinPulse. O widget pessoal oferece apenas esse conector, sem bancos Sandbox. A disponibilidade desse widget depende das permissões da sua aplicação.
+
+Se a Pluggy restringir sua aplicação ao fluxo pelo Dashboard, use **Importar conexão pessoal existente**: abra Applications → sua aplicação → Demo, conecte **MeuPluggy**, copie o itemId e importe no FinPulse. Em seleção personalizada, habilite MeuPluggy em Customization → Connectors, grupo Personal, aba Direct Connectors.
+
+A autorização de um banco novo continua sendo feita no Meu Pluggy, conforme o guia oficial de uso pessoal. O widget aqui vincula os dados autorizados; não remove essa etapa. O serviço pessoal tem até cinco conexões e atualização a cada 24 horas. Sandbox contém dados simulados e não é usado neste fluxo.
+
+### Produto para outras pessoas
+
 Solicite à Pluggy a habilitação da aplicação para seu produto com múltiplos usuários e confirme plano, produtos de dados e bancos disponíveis. O MeuPluggy pessoal permite consultar seus próprios dados; não substitui essa habilitação.
 
 Prefira habilitar a aplicação existente para manter suas conexões. Se for necessária outra aplicação, combine a migração com a Pluggy antes de substituir as chaves: itens não são transferidos automaticamente entre aplicações.
