@@ -189,7 +189,13 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
     fetchRealMarketData();
   }, []);
 
+  const bankRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => bankRequest.current?.abort(), []);
   const fetchBankAccounts = async (itemIds = pluggyItemIds) => {
+    bankRequest.current?.abort();
+    const controller = new AbortController();
+    bankRequest.current = controller;
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(60000)]);
     if (itemIds.length === 0) {
       setHasLoadedBankData(true);
       setBankDataLoading(false);
@@ -210,10 +216,10 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
       const params = new URLSearchParams();
       itemIds.forEach((itemId) => params.append('itemId', itemId));
       const [accountsResponse, transactionsResponse, investmentsResponse, loansResponse] = await Promise.all([
-        fetch(`/api/open-finance/accounts?${params.toString()}`),
-        fetch(`/api/open-finance/transactions?${params.toString()}`),
-        fetch(`/api/open-finance/investments?${params.toString()}`),
-        fetch(`/api/open-finance/loans?${params.toString()}`),
+        fetch(`/api/open-finance/accounts?${params.toString()}`, { signal }),
+        fetch(`/api/open-finance/transactions?${params.toString()}`, { signal }),
+        fetch(`/api/open-finance/investments?${params.toString()}`, { signal }),
+        fetch(`/api/open-finance/loans?${params.toString()}`, { signal }),
       ]);
       const accountsData = await accountsResponse.json();
       if (!accountsResponse.ok) throw new Error(accountsData.error || 'Falha ao carregar as contas da Pluggy.');
@@ -252,13 +258,17 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
       setSyncVersion((version) => version + 1);
       return true;
     } catch (e) {
+      if (controller.signal.aborted) return false;
+      controller.abort();
       console.warn('Erro ao carregar dados bancários Pluggy:', e);
-      const message = e instanceof Error ? e.message : 'Erro ao atualizar os dados da Pluggy.';
+      const message = e instanceof Error && e.name === 'TimeoutError' ? 'A atualização demorou mais que o esperado. Os dados anteriores foram mantidos; tente atualizar novamente.' : e instanceof Error ? e.message : 'Erro ao atualizar os dados da Pluggy.';
       setProviderSyncError(message);
       return false;
     } finally {
-      setHasLoadedBankData(true);
-      setBankDataLoading(false);
+      if (bankRequest.current === controller) {
+        setHasLoadedBankData(true);
+        setBankDataLoading(false);
+      }
     }
   };
 
@@ -463,7 +473,6 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         {saveError && <div role="alert" className="rounded-lg border border-rose-500/30 p-3 text-sm text-rose-300">{saveError}<button onClick={() => { setSavingData(true); saveUserData().then(() => setSaveError(null)).catch((error) => setSaveError(error.message)).finally(() => setSavingData(false)); }} className="ml-3 underline">Tentar salvar novamente</button></div>}
         {providerSyncError && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{providerSyncError}</p>}
         {history.error && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{history.error} Os dados consultados continuam visíveis, mas esta atualização pode não ter sido salva no histórico.</p>}
-        {bankDataLoading && hasLoadedBankData && !showDataSkeleton && <p role="status" className="flex items-center gap-2 text-xs text-slate-400"><RefreshCw aria-hidden="true" className="h-3.5 w-3.5 animate-spin"/>Atualizando dados… Os últimos valores permanecem visíveis.</p>}
         {showDataSkeleton ? <DataSkeleton label={menuTransitioning ? 'Abrindo seção…' : 'Carregando seus dados financeiros…'} variant={activeTab === 'overview' ? 'overview' : activeTab === 'connections' ? 'connections' : activeTab === 'ledger' || activeTab === 'planning' ? 'ledger' : 'list'}/> : <div key={activeTab} className="menu-content space-y-6">
         {activeTab === 'learn' && <InvestmentAcademySection selicRateAnnual={realIndicators?.selic.metaAnnualPct} cdiRateAnnual={realIndicators?.cdi.annualizedPct}/>}
         {activeTab === 'planning' && <PlanningSection data={planning} onChange={setPlanning} transactions={classifiedTransactions} privateMode={isPrivateMode} history={history} controls={controlView} onConnections={() => navigateToTab('connections')} onLoans={() => navigateToTab('loans')}/>}
