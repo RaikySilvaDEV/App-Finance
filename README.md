@@ -24,7 +24,24 @@ O Ollama foi instalado neste computador com o modelo `qwen3:4b`. O `.env` usa `A
 
 Em **Diagnóstico com IA → Pesquisar na internet**, o buscador recebe somente a pergunta digitada. O sistema seleciona fontes oficiais e a IA local usa os trechos dos resultados para elaborar uma resposta, exibindo os links e a data de consulta. Não é uma leitura integral das páginas nem uma cotação de mercado em tempo real. Resultados da internet não têm permissão para executar comandos ou operações bancárias.
 
-O gráfico **Evolução estimada do saldo** usa o saldo atual e o extrato confirmado disponível. Ele é uma reconstrução, não um histórico de saldos certificado pelo banco. A seção **Conexões** mostra status e produtos suportados; as autorizações e a revogação bancária continuam no Meu Pluggy.
+O gráfico **Evolução do saldo** usa consultas diárias salvas quando há pelo menos duas datas no período. Caso contrário, estima o histórico com o saldo atual e o extrato confirmado disponível. Ele é uma reconstrução, não um histórico de saldos certificado pelo banco. A seção **Conexões** mostra status e produtos suportados; as autorizações e a revogação bancária continuam no Meu Pluggy.
+
+## Planejamento e classificação
+
+- **Planejamento → Orçamento**: limites por categoria e mês, comparados ao consumo confirmado em reais. Reembolsos são separados; o orçamento mostra consumo bruto.
+- **Contas e parcelas**: cadastro manual, vencimentos mensais, valores por parcela e marcação manual de pagamento. Meses curtos usam o último dia válido; nenhum pagamento é executado pelo aplicativo.
+- **Metas**: valor desejado, valor reservado e data opcional. Os valores são informados pelo usuário e não aumentam o saldo bancário.
+- **Regras**: comparação de trecho da descrição com banco opcional. A primeira regra compatível é aplicada; uma correção individual tem prioridade. Abra um lançamento no extrato para corrigir categoria e natureza ou criar uma regra.
+- **Empréstimos**: contratos retornados pela Pluggy e registros manuais separados. Marque o cadastro manual como também conectado se representar o mesmo contrato, para não somá-lo novamente no diagnóstico. Após pagar uma parcela, atualize os valores manuais.
+- **Histórico**: movimentações são guardadas por identificador, e a última consulta completa de cada dia gera um registro de saldos. O extrato combina o arquivo com as consultas recentes, sem duplicar identificadores. A tabela mostra as últimas 180 datas consultadas, sem apagar os registros anteriores. Com pelo menos duas datas salvas no período, o gráfico usa esses saldos consultados; enquanto isso, continua identificado como estimativa.
+
+O consumo exclui transferências identificadas, pagamentos de fatura, aplicações, resgates e empréstimos. Um PIX sem identificação fica como transferência a revisar: confirme se é compra ou transferência própria. A identificação automática de pares é uma sugestão baseada em descrição, moeda, data e valor; verifique antes de usar como conciliação definitiva. Dados brutos do provedor são preservados no histórico; correções ficam separadas no planejamento.
+
+O histórico é guardado na tabela `financial_history`, isolado por usuário, no mesmo SQLite/PostgreSQL da conta. Ele começa nas consultas realizadas após a atualização; não existe coleta diária quando o aplicativo está fechado. Falhas parciais de sincronização são informadas e não geram um retrato completo fictício do dia.
+
+### Dados dos empréstimos Pluggy
+
+A interface apresenta os campos documentados que a conexão fornecer: contrato/IPOC, modalidade, datas, valor contratado e saldo para quitação, CET, amortização, juros e indexadores, tarifas, encargos, garantias, prazo, parcelas, pagamentos e cobranças adicionais. Campos ausentes são indicados. A primeira parcela e o vencimento final não são tratados como a próxima parcela. As taxas pré e pós-fixadas seguem a convenção documentada `1 = 100%`; o CET e demais taxas percentuais são mostrados conforme retornados. Consulte a [documentação de empréstimos](https://docs.pluggy.ai/pt/docs/products/loans).
 
 ## Login e dados salvos
 

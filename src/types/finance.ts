@@ -61,6 +61,8 @@ export interface BankAccount {
 }
 
 export interface FinancialTransaction {
+  sourceAccountType?: 'BANK' | 'CREDIT';
+  providerItemId?: string;
   id: string;
   type: 'pix_transfer' | 'ted_transfer' | 'invest_aporte' | 'invest_resgate' | 'account_transaction';
   amount: number;

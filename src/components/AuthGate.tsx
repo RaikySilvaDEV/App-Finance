@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Layers, LogIn, LoaderCircle } from 'lucide-react';
 type User = { id: string; email: string };
-export type SavedState = { holdings?: any[]; itemIds?: string[]; profile?: any; migrated?: boolean };
+export type SavedState = { holdings?: any[]; itemIds?: string[]; profile?: any; migrated?: boolean; planning?: import('../lib/planning').PlanningData };
 const keys = ['finpulse_real_holdings_v3', 'finpulse_meu_pluggy_item_ids_v1'];
 function legacy() {
   try { return { holdings: JSON.parse(localStorage.getItem(keys[0]) || '[]'), itemIds: JSON.parse(localStorage.getItem(keys[1]) || '[]'), profile: 'Moderado' }; }

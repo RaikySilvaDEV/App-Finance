@@ -6,6 +6,8 @@ import { randomBytes, scrypt as scryptCallback, timingSafeEqual, createHash } fr
 import { promisify } from 'node:util';
 import { neon } from '@neondatabase/serverless';
 import type { Express, Request, Response } from 'express';
+import { validatePlanning } from './src/lib/planning.js';
+import { installHistory } from './history.js';
 
 type UserRecord = { id: string; email: string; password: string; state: string };
 type SessionUser = Pick<UserRecord, 'id' | 'email' | 'state'>;
@@ -34,6 +36,7 @@ function localDatabase() {
     mkdirSync(dataDirectory, { recursive: true });
     db = new DatabaseSync(path.join(dataDirectory, 'finance.sqlite'));
     db.exec(`PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, state TEXT NOT NULL DEFAULT '{}'); CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL);`);
+    db.exec('CREATE TABLE IF NOT EXISTS financial_history (user_id TEXT NOT NULL, record_id TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, observed_at INTEGER NOT NULL, PRIMARY KEY (user_id,record_id))');
   }
   return db;
 }
@@ -47,6 +50,7 @@ async function ensureDatabase() {
     schemaReady = (async () => {
       await sql`CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, password TEXT NOT NULL, state TEXT NOT NULL DEFAULT '{}')`;
       await sql`CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires BIGINT NOT NULL)`;
+      await sql`CREATE TABLE IF NOT EXISTS financial_history (user_id TEXT NOT NULL, record_id TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, observed_at BIGINT NOT NULL, PRIMARY KEY (user_id,record_id))`;
     })().catch((error) => {
       schemaReady = null;
       throw error;
@@ -122,7 +126,7 @@ function readState(user: SessionUser) { return JSON.parse(user.state || '{}'); }
 function safeState(value: any) {
   if (!value || !Array.isArray(value.holdings) || !Array.isArray(value.itemIds) || value.holdings.length > 1000 || value.itemIds.length > 100) throw new Error('Dados inválidos.');
   if (!value.itemIds.every((id: unknown) => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id))) throw new Error('Conexão inválida.');
-  return { holdings: value.holdings, itemIds: [...new Set<string>(value.itemIds)], profile: ['Moderado', 'Conservador', 'Arrojado'].includes(value.profile) ? value.profile : 'Moderado' };
+  return { holdings: value.holdings, itemIds: [...new Set<string>(value.itemIds)], profile: ['Moderado', 'Conservador', 'Arrojado'].includes(value.profile) ? value.profile : 'Moderado', planning: value.planning === undefined ? undefined : validatePlanning(value.planning) };
 }
 
 function isDuplicateUser(error: unknown) {
@@ -199,7 +203,7 @@ export function installAuth(app: Express, validateItem: (id: string) => Promise<
       const owned = readState(res.locals.user).itemIds || [];
       const migrated = readState(res.locals.user).migrated || false;
       if (state.itemIds.some((id) => !owned.includes(id))) return res.status(403).json({ error: 'Adicione a conexão antes de salvar.' });
-      await saveState(res.locals.user.id, { ...state, migrated }); res.json({ ok: true });
+      await saveState(res.locals.user.id, { ...readState(res.locals.user), ...state, planning: state.planning ?? readState(res.locals.user).planning, migrated }); res.json({ ok: true });
     } catch { res.status(400).json({ error: 'Não foi possível salvar os dados.' }); }
   });
   app.post('/api/user/import', async (req, res) => {
@@ -208,7 +212,7 @@ export function installAuth(app: Express, validateItem: (id: string) => Promise<
       const existing = readState(res.locals.user);
       if (existing.migrated) return res.status(409).json({ error: 'Esta conta já importou os dados do navegador.' });
       for (const id of state.itemIds) await validateItem(id);
-      const combined = { ...state, holdings: [...(existing.holdings || []), ...state.holdings], itemIds: [...new Set([...(existing.itemIds || []), ...state.itemIds])], migrated: true };
+      const combined = { ...state, planning: existing.planning ?? state.planning, holdings: [...(existing.holdings || []), ...state.holdings], itemIds: [...new Set([...(existing.itemIds || []), ...state.itemIds])], migrated: true };
       await saveState(res.locals.user.id, combined); res.json(combined);
     } catch { res.status(400).json({ error: 'Falha ao importar. Seus dados antigos continuam neste navegador.' }); }
   });
@@ -222,6 +226,7 @@ export function installAuth(app: Express, validateItem: (id: string) => Promise<
       await saveState(res.locals.user.id, state); res.json({ ok: true });
     } catch { res.status(400).json({ error: 'Não foi possível validar esta conexão.' }); }
   });
+  installHistory(app, { ensure: ensureDatabase, sql, local: localDatabase });
   app.use('/api/open-finance', async (req, res, next) => {
     const ids = (Array.isArray(req.query.itemId) ? req.query.itemId : req.query.itemId ? [req.query.itemId] : []).map(String);
     if (ids.some((id) => !(readState(res.locals.user).itemIds || []).includes(id))) return res.status(403).json({ error: 'Conexão não pertence a este usuário.' });

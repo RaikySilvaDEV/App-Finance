@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Building2, 
   Sparkles, 
@@ -30,6 +30,10 @@ import { LoansSection } from './components/LoansSection';
 import { ConnectionsSection } from './components/ConnectionsSection';
 import { BalanceEvolution } from './components/BalanceEvolution';
 import { FinancialOverview } from './components/FinancialOverview';
+import { PlanningSection, ManualLoansPanel } from './components/PlanningSection';
+import { emptyPlanning, classifyTransactions } from './lib/planning';
+import type { PlanningData } from './lib/planning';
+import { useFinancialHistory } from './lib/useFinancialHistory';
 import { MainTab, Sidebar } from './components/Sidebar';
 import { GainsPerformanceCard } from './components/GainsPerformanceCard';
 import { BestOpportunitiesSection } from './components/BestOpportunitiesSection';
@@ -67,6 +71,11 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
   const [holdings, setHoldings] = useState<PortfolioHolding[]>(initialState.holdings || []);
   const [pluggyItemIds, setPluggyItemIds] = useState<string[]>(initialState.itemIds || []);
+  const [planning, setPlanning] = useState<PlanningData>({ ...emptyPlanning(), ...initialState.planning });
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const saveRevision = useRef(0);
+  const [syncVersion, setSyncVersion] = useState(0);
+  const [historyComplete, setHistoryComplete] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savingData, setSavingData] = useState(false);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -78,6 +87,8 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
   const [bankDataLoading, setBankDataLoading] = useState(pluggyItemIds.length > 0);
   const [providerSyncError, setProviderSyncError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
+  const history = useFinancialHistory(syncVersion, transactions, { accounts: bankAccounts, investments: providerInvestments, creditCards, loans }, historyComplete);
+  const classifiedTransactions = useMemo(() => classifyTransactions(history.allTransactions, planning), [history.allTransactions, planning]);
   // Modals
   const [selectedAssetForRisk, setSelectedAssetForRisk] = useState<Asset | null>(null);
   const [isRiskModalOpen, setIsRiskModalOpen] = useState<boolean>(false);
@@ -99,15 +110,21 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
     }, 4500);
   };
 
-  async function saveUserData() {
-    const response = await fetch('/api/user/state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ holdings, itemIds: pluggyItemIds, profile: investorProfile }) });
-    if (!response.ok) throw new Error('Não foi possível salvar seus dados. Tente novamente antes de sair.');
+  function saveUserData() {
+    const body = JSON.stringify({ holdings, itemIds: pluggyItemIds, profile: investorProfile, planning });
+    const operation = saveQueue.current.catch(() => {}).then(async () => {
+      const response = await fetch('/api/user/state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body });
+      if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || 'Não foi possível salvar seus dados. Tente novamente antes de sair.'); }
+    });
+    saveQueue.current = operation;
+    return operation;
   }
   useEffect(() => {
+    const revision = ++saveRevision.current;
     setSavingData(true);
-    const timer = setTimeout(() => { saveUserData().then(() => setSaveError(null)).catch((error) => setSaveError(error.message)).finally(() => setSavingData(false)); }, 400);
+    const timer = setTimeout(() => { saveUserData().then(() => { if (revision === saveRevision.current) setSaveError(null); }).catch((error) => { if (revision === saveRevision.current) setSaveError(error.message); }).finally(() => { if (revision === saveRevision.current) setSavingData(false); }); }, 400);
     return () => clearTimeout(timer);
-  }, [holdings, pluggyItemIds, investorProfile]);
+  }, [holdings, pluggyItemIds, investorProfile, planning]);
   async function logoutSafely() {
     try { await saveUserData(); await onLogout(); } catch (error: any) { setSaveError(error.message); }
   }
@@ -174,13 +191,16 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
             category: transaction.category || transaction.operationType || transaction.personalFinanceCategory || transaction.merchant?.category || undefined,
             currencyCode: transaction.currencyCode || 'BRL',
             sourceAccountId: String(transaction.accountId || ''),
-            sourceAccountName: account?.bankName || `${transaction.providerAccountName || 'Conta conectada'}${transaction.providerAccountType === 'CREDIT' ? ' (Cartão)' : ''}`,
+            sourceAccountType: transaction.providerAccountType === 'CREDIT' ? 'CREDIT' : 'BANK',
+            providerItemId: transaction.providerItemId || account?.providerItemId,
+            sourceAccountName: account?.bankName || transaction.providerBankName || transaction.providerAccountName || 'Conta conectada',
             destinationAccountName: transaction.merchant?.name || description,
             timestamp: transaction.date || transaction.createdAt || '',
             status: providerStatus === 'POSTED' ? 'concluido' : providerStatus === 'PENDING' ? 'processando' : 'processando',
             description,
           };
         });
+        if (transactionsData.unavailableItems?.length || transactionsData.truncatedItems?.length) syncErrors.push('O extrato está parcial em uma ou mais conexões. O histórico salvo foi preservado.');
         setTransactions(providerTransactions.sort((a, b) => b.timestamp.localeCompare(a.timestamp)));
       }
       const investmentsData = await investmentsResponse.json();
@@ -189,8 +209,11 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         syncErrors.push(investmentsData.error || 'Falha ao carregar investimentos da Pluggy.');
       } else {
         setProviderInvestments(investmentsData.investments || []);
+        if (investmentsData.unavailableItems?.length) syncErrors.push('Investimentos indisponíveis em uma ou mais conexões.');
       }
       setProviderSyncError(syncErrors.length ? syncErrors.join(' ') : null);
+      setHistoryComplete(syncErrors.length === 0);
+      setSyncVersion((version) => version + 1);
       return true;
     } catch (e) {
       console.warn('Erro ao carregar dados bancários Pluggy:', e);
@@ -394,12 +417,16 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         />
       {/* Main Content Area */}
       <main id="overview" className="min-w-0 flex-1 w-full px-4 pt-5 pb-24 sm:px-6 lg:px-7 lg:py-8 space-y-6">
-        <div><h1 className="text-2xl font-semibold tracking-tight text-white">{{ overview: 'Visão geral', accounts: 'Contas e cartões', assets: 'Ativos', ledger: 'Fluxo de caixa', market: 'Mercado', portfolio: 'Posições manuais', loans: 'Empréstimos', connections: 'Conexões' }[activeTab]}</h1><p className="mt-2 text-sm text-slate-500">{{ overview: 'Uma visão das suas finanças conectadas.', accounts: 'Saldos bancários, cartões e limites.', assets: 'Seus investimentos conectados, organizados por classe ou instituição.', ledger: 'Acompanhe entradas, despesas e movimentações.', market: 'Indicadores e oportunidades de investimento.', portfolio: 'Acompanhe os ativos que você cadastrou.', loans: 'Confira suas dívidas informadas pelos bancos conectados.', connections: 'Suas instituições, atualizações e autorizações.' }[activeTab]}</p></div>
+        <div><h1 className="text-2xl font-semibold tracking-tight text-white">{{ overview: 'Visão geral', accounts: 'Contas e cartões', assets: 'Ativos', ledger: 'Fluxo de caixa', market: 'Mercado', portfolio: 'Posições manuais', loans: 'Empréstimos', connections: 'Conexões', planning: 'Planejamento' }[activeTab]}</h1><p className="mt-2 text-sm text-slate-500">{{ overview: 'Uma visão das suas finanças conectadas.', accounts: 'Saldos bancários, cartões e limites.', assets: 'Seus investimentos conectados, organizados por classe ou instituição.', ledger: 'Acompanhe entradas, despesas e movimentações.', market: 'Indicadores e oportunidades de investimento.', portfolio: 'Acompanhe os ativos que você cadastrou.', loans: 'Empréstimos conectados e valores cadastrados por você.', connections: 'Suas instituições, atualizações e autorizações.', planning: 'Orçamento, compromissos, metas e histórico, salvos na sua conta.' }[activeTab]}</p></div>
         {(savingData || saveError) && <p role="status" className="text-xs text-slate-500">{savingData ? 'Salvando seus dados…' : 'Dados ainda não salvos'}</p>}
         {saveError && <div role="alert" className="rounded-lg border border-rose-500/30 p-3 text-sm text-rose-300">{saveError}<button onClick={() => { setSavingData(true); saveUserData().then(() => setSaveError(null)).catch((error) => setSaveError(error.message)).finally(() => setSavingData(false)); }} className="ml-3 underline">Tentar salvar novamente</button></div>}
+        {providerSyncError && activeTab !== 'accounts' && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{providerSyncError}</p>}
+        {history.error && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{history.error} Os dados consultados continuam visíveis, mas esta atualização pode não ter sido salva no histórico.</p>}
+        {activeTab === 'planning' && <PlanningSection data={planning} onChange={setPlanning} transactions={classifiedTransactions} privateMode={isPrivateMode} history={history}/>}
         {activeTab === 'overview' && <>
+        <button onClick={() => setActiveTab('planning')} className="flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/50 p-4 text-left"><span className="text-sm text-slate-200">Meu planejamento</span><span className="text-xs text-slate-500">Limites de gastos · contas a pagar · metas →</span></button>
         <FinancialOverview accounts={bankAccounts} cards={creditCards} investments={providerInvestments} privateMode={isPrivateMode} onOpenAccounts={() => setActiveTab('accounts')} onOpenAssets={() => setActiveTab('assets')} onConnect={() => setIsOpenFinanceConsentOpen(true)}/>
-        <BalanceEvolution accounts={bankAccounts} transactions={transactions} isPrivateMode={isPrivateMode}/>
+        <BalanceEvolution accounts={bankAccounts} transactions={history.allTransactions} isPrivateMode={isPrivateMode} snapshots={history.snapshots}/>
         {/* 1. Core Performance & Gains Dashboard (Diário, Semanal, Mensal, YTD) */}
         <details className="market-preview rounded-2xl border border-slate-800 bg-slate-900/40">
           <summary className="flex cursor-pointer items-center justify-between gap-3 p-5 text-sm font-medium text-slate-300">Cotações do mercado <span className="text-xs font-normal text-slate-500">Abrir gráfico +</span></summary>
@@ -429,14 +456,16 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
         {activeTab === 'assets' && <ConnectedAssets section="investments" investments={visibleProviderInvestments} creditCards={[]} isPrivateMode={isPrivateMode} />}
 
-        {activeTab === 'loans' && <LoansSection loans={loans} complete={loansComplete} unsupported={loansUnsupported} isPrivateMode={isPrivateMode} onRefresh={() => fetchBankAccounts()} />}
+        {activeTab === 'loans' && <><ManualLoansPanel data={planning} onChange={setPlanning} privateMode={isPrivateMode}/><LoansSection loans={loans} complete={loansComplete} unsupported={loansUnsupported} isPrivateMode={isPrivateMode} onRefresh={() => fetchBankAccounts()} /></>}
         {activeTab === 'connections' && <ConnectionsSection itemIds={pluggyItemIds} onConnect={() => setIsOpenFinanceConsentOpen(true)} onRemove={(id) => { setPluggyItemIds((items) => items.filter((item) => item !== id)); showToast('Conexão removida do painel. A autorização no banco continua sendo gerenciada no Meu Pluggy.'); }}/>}
 
         {activeTab === 'ledger' && (<>
         {/* 3. Real Movement Ledger (Extrato de Transferências e Aportes) */}
         <section >
           <TransactionLedgerSection
-            transactions={transactions}
+            transactions={history.allTransactions}
+            planning={planning}
+            onPlanningChange={setPlanning}
             bankAccounts={bankAccounts}
             investments={visibleProviderInvestments}
             isPrivateMode={isPrivateMode}
@@ -503,6 +532,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         investorProfile={investorProfile}
         bankAccounts={bankAccounts}
         investments={providerInvestments}
+        manualLoans={planning.manualLoans}
         creditCards={creditCards}
         loans={loans}
         loansComplete={loansComplete}

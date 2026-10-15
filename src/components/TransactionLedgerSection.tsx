@@ -19,9 +19,14 @@ import {
 } from 'lucide-react';
 import { BankAccount, FinancialTransaction } from '../types/finance';
 import { BankLogo } from './BankLogo';
+import { PlanningEditor } from './PlanningSection';
+import { classifyTransactions, validatePlanning, natureLabels } from '../lib/planning';
+import type { PlanningData, ClassifiedTransaction, MovementNature } from '../lib/planning';
 
 interface TransactionLedgerSectionProps {
   transactions: FinancialTransaction[];
+  planning: PlanningData;
+  onPlanningChange: (data: PlanningData) => void;
   bankAccounts: BankAccount[];
   investments: Array<{ id: string; name?: string; balance?: number; currencyCode?: string }>;
   isPrivateMode: boolean;
@@ -42,16 +47,20 @@ const brazilDateKey = (timestamp: string) => {
 const currentBrazilMonth = () => brazilDateKey(new Date().toISOString()).slice(0, 7);
 
 export const TransactionLedgerSection: React.FC<TransactionLedgerSectionProps> = ({
-  transactions,
+  transactions: sourceTransactions,
+  planning, onPlanningChange,
   bankAccounts,
   investments,
   isPrivateMode,
 }) => {
-  const [selectedReceipt, setSelectedReceipt] = useState<FinancialTransaction | null>(null);
+  const transactions = useMemo(() => classifyTransactions(sourceTransactions, planning).map((tx) => ({ ...tx, category: tx.displayCategory })), [sourceTransactions, planning]);
+  const [editing, setEditing] = useState<ClassifiedTransaction | null>(null);
+  const [selectedReceipt, setSelectedReceipt] = useState<ClassifiedTransaction | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
   const [visibleCount, setVisibleCount] = useState(20);
   const [filterType, setFilterType] = useState<'all' | 'debit' | 'credit'>('all');
   const [filterBank, setFilterBank] = useState('all');
+  const [filterNature, setFilterNature] = useState('all');
   const [spendPeriod, setSpendPeriod] = useState<'month' | 'all' | 'custom'>('month');
   const [spendFrom, setSpendFrom] = useState('');
   const [spendTo, setSpendTo] = useState('');
@@ -69,19 +78,20 @@ export const TransactionLedgerSection: React.FC<TransactionLedgerSectionProps> =
   const cashMonthTransactions = useMemo(() => transactions.filter((transaction) => transaction.type === 'account_transaction' && brazilDateKey(transaction.timestamp).slice(0, 7) === cashMonth), [transactions, cashMonth]);
   const cashFlowTransactions = cashMonthTransactions.filter((transaction) => filterBank === 'all' || transaction.sourceAccountName === filterBank);
   const filtered = cashFlowTransactions.filter((transaction) => {
+    if (filterNature !== 'all' && transaction.nature !== filterNature) return false;
     if (filterType !== 'all' && (transaction.type !== 'account_transaction' || transaction.direction !== filterType)) return false;
     if (filterBank !== 'all' && transaction.sourceAccountName !== filterBank) return false;
     return true;
   });
   const dailyTransactions = transactions.filter((transaction) => {
     const transactionDay = brazilDateKey(transaction.timestamp);
-    return transactionDay === selectedDay && transaction.type === 'account_transaction';
+    return transactionDay === selectedDay && transaction.type === 'account_transaction' && (filterBank === 'all' || transaction.sourceAccountName === filterBank);
   });
   const dailyTotals = dailyTransactions.reduce((totals, transaction) => {
     const currency = transaction.currencyCode || 'BRL';
     const amount = transaction.amount;
     const sum = totals.get(currency) || { income: 0, expense: 0, incomeCount: 0, expenseCount: 0 };
-    if (transaction.status !== 'concluido') return totals;
+    if (transaction.status !== 'concluido' || transaction.sourceAccountType === 'CREDIT') return totals;
     if (transaction.direction === 'debit') { sum.expense += amount; sum.expenseCount += 1; }
     if (transaction.direction === 'credit') { sum.income += amount; sum.incomeCount += 1; }
     totals.set(currency, sum);
@@ -92,7 +102,7 @@ export const TransactionLedgerSection: React.FC<TransactionLedgerSectionProps> =
     totals.set(currency, (totals.get(currency) || 0) + (Number(investment.balance) || 0));
     return totals;
   }, new Map<string, number>());
-  const monthlyTotals = cashFlowTransactions.reduce((totals, transaction) => {
+  const monthlyTotals = cashFlowTransactions.filter((tx) => tx.sourceAccountType !== 'CREDIT').reduce((totals, transaction) => {
     const currency = transaction.currencyCode || 'BRL';
     const sum = totals.get(currency) || { income: 0, expense: 0, pendingExpense: 0, incomeCount: 0, expenseCount: 0, pendingCount: 0 };
     if (transaction.status === 'processando' && transaction.direction === 'debit') { sum.pendingExpense += transaction.amount; sum.pendingCount += 1; }
@@ -104,8 +114,8 @@ export const TransactionLedgerSection: React.FC<TransactionLedgerSectionProps> =
   const categoryTotals = useMemo(() => {
     const totals = new Map<string, { total: number; currency: string; count: number }>();
     for (const transaction of cashFlowTransactions) {
-      if (transaction.direction !== 'debit' || transaction.status !== 'concluido') continue;
-      const category = getExpenseCategory(transaction.category, transaction.description);
+      if (transaction.direction !== 'debit' || transaction.status !== 'concluido' || transaction.nature !== 'expense') continue;
+      const category = transaction.displayCategory;
       const currency = transaction.currencyCode || 'BRL';
       const key = `${category}::${currency}`;
       const current = totals.get(key) || { total: 0, currency, count: 0 };
@@ -118,8 +128,8 @@ export const TransactionLedgerSection: React.FC<TransactionLedgerSectionProps> =
   const pendingCategoryTotals = useMemo(() => {
     const totals = new Map<string, { total: number; currency: string; count: number }>();
     for (const transaction of cashFlowTransactions) {
-      if (transaction.direction !== 'debit' || transaction.status !== 'processando') continue;
-      const category = getExpenseCategory(transaction.category, transaction.description);
+      if (transaction.direction !== 'debit' || transaction.status !== 'processando' || transaction.nature !== 'expense') continue;
+      const category = transaction.displayCategory;
       const currency = transaction.currencyCode || 'BRL';
       const key = `${category}::${currency}`;
       const current = totals.get(key) || { total: 0, currency, count: 0 };
@@ -133,15 +143,15 @@ export const TransactionLedgerSection: React.FC<TransactionLedgerSectionProps> =
   const spend = useMemo(() => {
     const categories = new Map<string, { bank: string; count: number; total: number; currency: string }>();
     for (const tx of transactions) {
-      if (tx.type !== 'account_transaction' || tx.direction !== 'debit' || tx.status !== 'concluido') continue;
+      if (tx.type !== 'account_transaction' || tx.direction !== 'debit' || tx.status !== 'concluido' || tx.nature !== 'expense') continue;
       const date = new Date(tx.timestamp);
       if (!Number.isFinite(date.getTime())) continue;
       if (spendPeriod === 'month' && brazilDateKey(tx.timestamp).slice(0, 7) !== cashMonth) continue;
-      if (spendPeriod === 'custom' && spendFrom && date < new Date(`${spendFrom}T00:00:00`)) continue;
-      if (spendPeriod === 'custom' && spendTo && date > new Date(`${spendTo}T23:59:59.999`)) continue;
+      if (spendPeriod === 'custom' && spendFrom && brazilDateKey(tx.timestamp) < spendFrom) continue;
+      if (spendPeriod === 'custom' && spendTo && brazilDateKey(tx.timestamp) > spendTo) continue;
       const currency = tx.currencyCode || 'BRL';
       const bank = tx.sourceAccountName || 'Banco não identificado';
-      const category = getExpenseCategory(tx.category, tx.description);
+      const category = tx.displayCategory;
       const key = `${bank}::${category}::${currency}`;
       const current = categories.get(key) || { bank, count: 0, total: 0, currency };
       current.count += 1;
@@ -171,7 +181,7 @@ export const TransactionLedgerSection: React.FC<TransactionLedgerSectionProps> =
     group.push(transaction);
     groups.set(day, group);
     return groups;
-  }, new Map<string, FinancialTransaction[]>()).entries()).sort(([a], [b]) => b.localeCompare(a));
+  }, new Map<string, ClassifiedTransaction[]>()).entries()).sort(([a], [b]) => b.localeCompare(a));
   const cashMonthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' })
     .format(new Date(`${cashMonth}-01T12:00:00Z`));
   const shiftCashMonth = (delta: number) => {
@@ -185,34 +195,6 @@ export const TransactionLedgerSection: React.FC<TransactionLedgerSectionProps> =
       day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo',
     }).format(date);
   };
-
-  function getExpenseCategory(providerCategory: string | undefined, description: string) {
-    const raw = `${providerCategory || ''} ${description}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-    const aliases: Array<[RegExp, string]> = [
-      [/resgat|res aplic|redemption/, 'Resgate de investimento'],
-      [/aplic.*invest|invest.*aplic/, 'Aplicação de investimento'],
-      [/supermerc|mercado|grocery|groceries|food.*store/, 'Mercado'],
-      [/restaurante|aliment|food|dining|lanch|padaria|cafe|eating out/, 'Alimentação'],
-      [/food delivery|delivery|ifood/, 'Delivery'],
-      [/gas station|gasoline|transporte|transport|combust|posto|uber|taxi|ride.?hailing|estacionamento|pedagio/, 'Transporte'],
-      [/moradia|housing|aluguel|condominio|energia|agua|gas|internet|telefone|utility|conta/, 'Moradia e contas'],
-      [/saude|health|farmacia|hospital|medic/, 'Saúde'],
-      [/educacao|education|escola|curso|livraria/, 'Educação'],
-      [/digital services|assinatura|subscription|stream|netflix|spotify|software/, 'Serviços digitais'],
-      [/lazer|entertain|cinema|viagem|hotel|turismo/, 'Lazer e viagens'],
-      [/electronics|eletronic/, 'Eletrônicos'],
-      [/office supplies|papelaria/, 'Material de escritório'],
-      [/pet supplies|pet supplies and vet|veterinar|pet shop/, 'Pets'],
-      [/compra|shopping|varejo|clothing|vestuario/, 'Compras'],
-      [/transfer|pix/, 'Transferências'],
-      [/invest|investment|aplicacao|aplicação/, 'Investimentos'],
-    ];
-    for (const [pattern, label] of aliases) if (pattern.test(raw)) return label;
-    if (providerCategory?.trim() && !/^(other|others|unknown|miscellaneous|outros?)$/i.test(providerCategory.trim())) {
-      return providerCategory.trim().replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toLocaleUpperCase('pt-BR'));
-    }
-    return 'Outros gastos';
-  }
 
   const formatCurrency = (value: number, currency: string) => isPrivateMode
     ? `${currency} ••••••`
@@ -238,7 +220,7 @@ export const TransactionLedgerSection: React.FC<TransactionLedgerSectionProps> =
 Lançamento bancário consultado pela Pluggy
 Referência da transação: ${tx.id}
 Data: ${tx.timestamp}
-Valor: ${formatBrl(tx.amount)}
+Valor: ${formatCurrency(tx.amount, tx.currencyCode || 'BRL')}
 Origem: ${tx.sourceAccountName}
 Destino: ${tx.destinationAccountName}
 Descrição: ${tx.description}
@@ -276,7 +258,7 @@ Descrição: ${tx.description}
 
       <section className="my-4 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/40" aria-labelledby="cashflow-heading">
         <div className="flex flex-col gap-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-cyan-950/30 to-slate-950 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-          <div className="flex items-center gap-3"><div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-2 text-cyan-300"><CalendarDays className="h-4 w-4" /></div><div><h4 id="cashflow-heading" className="text-sm font-bold text-white">Fluxo de caixa</h4><p className="mt-1 text-[11px] text-slate-400">Entradas, saídas e pendências do mês</p></div></div>
+          <div className="flex items-center gap-3"><div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-2 text-cyan-300"><CalendarDays className="h-4 w-4" /></div><div><h4 id="cashflow-heading" className="text-sm font-bold text-white">Fluxo de caixa</h4><p className="mt-1 text-[11px] text-slate-400">Movimentação bancária do mês · sem somar compras de cartão</p></div></div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <label className="sr-only" htmlFor="cashflow-account">Conta do fluxo de caixa</label>
             <select id="cashflow-account" value={filterBank} onChange={(event) => setFilterBank(event.target.value)} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200"><option value="all">Todas as contas</option>{transactionBanks.map((bank) => <option key={bank} value={bank}>{bank}</option>)}</select>
@@ -288,7 +270,7 @@ Descrição: ${tx.description}
           </div>
         </div>
         {monthlyTotals.size ? <div className="space-y-4 p-4 sm:p-5">
-          <p className="text-[10px] text-slate-500">Totais por moeda, conforme os dados recebidos das instituições. Pendências não são somadas às entradas/saídas confirmadas.</p>
+          <p className="text-[10px] text-slate-500">Entradas e saídas são movimentações de contas bancárias, incluindo transferências; não equivalem a renda e consumo. Os gastos por categoria incluem compras de cartão, mas excluem faturas, aplicações, empréstimos e transferências. PIX sem identificação fica para revisão. Classificações automáticas são sugestões; você pode corrigir em cada lançamento.</p>
           {Array.from(monthlyTotals, ([currency, totals]) => <div key={currency} className="space-y-3">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{currency}</p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -313,9 +295,9 @@ Descrição: ${tx.description}
           <label className="flex items-center gap-2 text-[11px] text-slate-400">Dia<input type="date" value={selectedDay} onChange={(event) => setSelectedDay(event.target.value)} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 [color-scheme:dark]" /></label>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {bankAccounts.map((account) => <div key={account.id} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3"><span className="flex items-center gap-2 text-[10px] text-slate-400"><BankLogo name={account.bankName} className="h-6 w-6"/>Saldo atual · {account.bankName}</span><strong className="mt-2 block text-base font-bold text-white tabular-nums">{formatCurrency(account.balance, 'BRL')}</strong></div>)}
+          {bankAccounts.filter((account) => filterBank === 'all' || account.bankName === filterBank).map((account) => <div key={account.id} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3"><span className="flex items-center gap-2 text-[10px] text-slate-400"><BankLogo name={account.bankName} className="h-6 w-6"/>Saldo atual · {account.bankName}</span><strong className="mt-2 block text-base font-bold text-white tabular-nums">{formatCurrency(account.balance, account.currencyCode || 'BRL')}</strong></div>)}
           {Array.from(dailyTotals, ([currency, values]) => <React.Fragment key={currency}>
-            <div className="rounded-xl border border-rose-500/15 bg-rose-500/[0.04] p-3"><span className="text-[10px] text-slate-400">Saídas (gastos) · {currency}</span><strong className="mt-2 block text-base font-bold text-rose-300 tabular-nums">{formatCurrency(values.expense, currency)}</strong><span className="mt-1 block text-[10px] text-slate-500">{values.expenseCount} débitos registrados</span></div>
+            <div className="rounded-xl border border-rose-500/15 bg-rose-500/[0.04] p-3"><span className="text-[10px] text-slate-400">Saídas bancárias · {currency}</span><strong className="mt-2 block text-base font-bold text-rose-300 tabular-nums">{formatCurrency(values.expense, currency)}</strong><span className="mt-1 block text-[10px] text-slate-500">{values.expenseCount} débitos registrados</span></div>
             <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/[0.04] p-3"><span className="text-[10px] text-slate-400">Créditos registrados · {currency}</span><strong className="mt-2 block text-base font-bold text-emerald-300 tabular-nums">{formatCurrency(values.income, currency)}</strong><span className="mt-1 block text-[10px] text-slate-500">{values.incomeCount} créditos · diferença após débitos {formatCurrency(values.income - values.expense, currency)}</span></div>
           </React.Fragment>)}
           {Array.from(investmentTotals, ([currency, total]) => <div key={`invest-${currency}`} className="rounded-xl border border-violet-500/15 bg-violet-500/[0.04] p-3"><span className="flex items-center gap-2 text-[10px] text-slate-400"><TrendingUp className="h-3.5 w-3.5 text-violet-300" />Investido · {currency}</span><strong className="mt-2 block text-base font-bold text-violet-200 tabular-nums">{formatCurrency(total, currency)}</strong><span className="mt-1 block text-[10px] text-slate-500">{investments.length} posições conectadas</span></div>)}
@@ -326,7 +308,7 @@ Descrição: ${tx.description}
           <h5 className="mb-2 text-xs font-semibold text-white">O que saiu da conta neste dia</h5>
           <div className="space-y-2">
             {dailyTransactions.filter((transaction) => transaction.status === 'concluido' && transaction.direction === 'debit').map((transaction) => <div key={transaction.id} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-slate-800/80 bg-slate-900/50 px-3 py-2.5">
-              <div className="min-w-0"><p className="truncate text-xs font-medium text-slate-200">{transaction.description || 'Débito bancário'}</p><p className="mt-1 truncate text-[10px] text-slate-500">{getExpenseCategory(transaction.category, transaction.description)} · {transaction.sourceAccountName}</p></div>
+              <div className="min-w-0"><p className="truncate text-xs font-medium text-slate-200">{transaction.description || 'Débito bancário'}</p><p className="mt-1 truncate text-[10px] text-slate-500">{transaction.displayCategory} · {transaction.sourceAccountName}</p></div>
               <strong className="shrink-0 text-xs font-semibold text-rose-300 tabular-nums">−{formatCurrency(transaction.amount, transaction.currencyCode || 'BRL')}</strong>
             </div>)}
           </div>
@@ -336,7 +318,7 @@ Descrição: ${tx.description}
           <p className="mb-2 text-[10px] text-slate-500">Pode incluir resgates e transferências; crédito não significa renda ou lucro.</p>
           <div className="space-y-2">
             {dailyTransactions.filter((transaction) => transaction.status === 'concluido' && transaction.direction === 'credit').map((transaction) => <div key={transaction.id} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-slate-800/80 bg-slate-900/50 px-3 py-2.5">
-              <div className="min-w-0"><p className="truncate text-xs font-medium text-slate-200">{transaction.description || 'Crédito bancário'}</p><p className="mt-1 truncate text-[10px] text-slate-500">{getExpenseCategory(transaction.category, transaction.description)} · {transaction.sourceAccountName}</p></div>
+              <div className="min-w-0"><p className="truncate text-xs font-medium text-slate-200">{transaction.description || 'Crédito bancário'}</p><p className="mt-1 truncate text-[10px] text-slate-500">{transaction.displayCategory} · {transaction.sourceAccountName}</p></div>
               <strong className="shrink-0 text-xs font-semibold text-emerald-300 tabular-nums">+{formatCurrency(transaction.amount, transaction.currencyCode || 'BRL')}</strong>
             </div>)}
           </div>
@@ -399,7 +381,7 @@ Descrição: ${tx.description}
       <div className="flex flex-col gap-2 border-b border-slate-800/60 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-[11px] font-semibold text-slate-300">Movimentações de {cashMonthLabel}</div>
         <div className="flex w-full gap-1 overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70 p-1 sm:w-auto">
-          {([{ id: 'all', label: 'Tudo' }, { id: 'debit', label: 'Despesas' }, { id: 'credit', label: 'Entradas' }] as const).map((filter) => (
+          {([{ id: 'all', label: 'Tudo' }, { id: 'debit', label: 'Saídas' }, { id: 'credit', label: 'Entradas' }] as const).map((filter) => (
             <button key={filter.id} onClick={() => setFilterType(filter.id)} aria-pressed={filterType === filter.id} className={`flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-xs font-semibold transition-colors sm:flex-none ${filterType === filter.id ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}>
               {filter.label}
             </button>
@@ -407,6 +389,7 @@ Descrição: ${tx.description}
         </div>
       </div>
 
+      <div className="mt-3 flex flex-wrap items-center gap-3"><label className="text-xs text-slate-400">Tipo de movimentação <select value={filterNature} onChange={(event) => { setFilterNature(event.target.value); setVisibleCount(20); }} className="ml-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs"><option value="all">Todos os tipos</option>{Object.entries(natureLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><span className="text-[11px] text-slate-500">Abra um lançamento para corrigir sua classificação.</span></div>
       {/* Transactions List */}
       <div className="divide-y divide-slate-800/60 mt-1">
         {groupedMovements.map(([day, dayTransactions]) => <React.Fragment key={day}>
@@ -431,11 +414,11 @@ Descrição: ${tx.description}
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <span className="max-w-full truncate text-xs font-bold text-white sm:max-w-[25rem]">{tx.description}</span>
                     <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${badge.color}`}>
-                      {tx.type === 'account_transaction' ? getExpenseCategory(tx.category, tx.description) : badge.label}
+                      {tx.type === 'account_transaction' ? tx.displayCategory : badge.label}
                     </span>
                   </div>
                   <p className="mt-1 truncate text-[10px] text-slate-400">
-                    <span className="text-slate-500">Banco</span> <strong className="inline-flex items-center gap-1.5 font-medium text-slate-300"><BankLogo name={tx.sourceAccountName} className="h-5 w-5"/>{tx.sourceAccountName}</strong>
+                    <span className="text-slate-500">Banco</span> <strong className="inline-flex items-center gap-1.5 font-medium text-slate-300"><BankLogo name={tx.sourceAccountName} className="h-5 w-5"/>{tx.sourceAccountName}</strong><span className="ml-1">· {tx.sourceAccountType === 'CREDIT' ? 'Cartão' : 'Conta'}</span>
                   </p>
                   <div className="mt-1 flex min-w-0 items-center gap-2 text-[10px] text-slate-500">
                     <Clock className="h-3 w-3 shrink-0" />
@@ -448,10 +431,10 @@ Descrição: ${tx.description}
               <div className="flex items-center justify-between gap-3 border-t border-slate-800/70 pt-2 sm:justify-end sm:border-0 sm:pt-0">
                 <div className="text-left sm:text-right">
                   <span className={`block font-mono text-sm font-bold tabular-nums sm:text-base ${tx.direction === 'debit' ? 'text-rose-300' : tx.direction === 'credit' ? 'text-emerald-300' : 'text-white'}`}>
-                    {tx.direction === 'debit' ? '−' : tx.direction === 'credit' ? '+' : ''}{formatBrl(tx.amount)}
+                    {tx.direction === 'debit' ? '−' : tx.direction === 'credit' ? '+' : ''}{formatCurrency(tx.amount, tx.currencyCode || 'BRL')}
                   </span>
                   <span className={`mt-0.5 flex items-center gap-1 text-[9px] font-semibold sm:justify-end ${tx.status === 'processando' ? 'text-amber-300' : tx.direction === 'debit' ? 'text-rose-400/80' : 'text-emerald-400/80'}`}>
-                    <CheckCircle2 className="h-3 w-3" />{tx.status === 'processando' ? 'Pendente' : tx.direction === 'debit' ? 'Saída' : tx.direction === 'credit' ? 'Entrada' : 'Confirmado'}
+                    <CheckCircle2 className="h-3 w-3" />{tx.status === 'processando' ? 'Pendente' : natureLabels[tx.nature]}
                   </span>
                 </div>
 
@@ -498,7 +481,7 @@ Descrição: ${tx.description}
             <div className="text-center py-2">
               <span className="text-xs text-slate-400 uppercase font-medium">Valor</span>
               <div className="text-3xl font-extrabold text-white font-mono mt-0.5">
-                {formatBrl(selectedReceipt.amount)}
+                {formatCurrency(selectedReceipt.amount, selectedReceipt.currencyCode || 'BRL')}
               </div>
               <span className="text-xs text-emerald-400 font-bold block mt-1">
                 Registro retornado pela instituição financeira
@@ -532,6 +515,8 @@ Descrição: ${tx.description}
               </div>
             </div>
 
+            <p className="text-xs text-slate-400">{natureLabels[selectedReceipt.nature]} · {selectedReceipt.sourceAccountType === 'CREDIT' ? 'Cartão' : 'Conta bancária'}</p>
+            <button onClick={() => { setEditing(selectedReceipt); setSelectedReceipt(null); }} className="w-full rounded-lg border border-rose-500/30 py-2 text-xs text-rose-300">Corrigir categoria ou tipo de movimentação</button>
             <div className="flex space-x-2 pt-2">
               <button
                 onClick={() => handleCopyReceipt(selectedReceipt)}
@@ -549,6 +534,7 @@ Descrição: ${tx.description}
           </div>
         </div>
       )}
+      {editing && <PlanningEditor title="Corrigir classificação" initial={{ category: editing.displayCategory, natureLabel: natureLabels[editing.nature], scope: 'Só este lançamento', text: editing.description.slice(0, 100) }} fields={[{ key: 'category', label: 'Categoria' }, { key: 'natureLabel', label: 'Tipo de movimentação', options: Object.values(natureLabels) }, { key: 'scope', label: 'Aplicar', options: ['Só este lançamento', 'Este e descrições semelhantes'] }, { key: 'text', label: 'Para a regra: trecho da descrição (mínimo 3 caracteres)' }]} onClose={() => setEditing(null)} onSave={(values) => { const nature = Object.entries(natureLabels).find(([, label]) => label === values.natureLabel)![0] as MovementNature; const correction = { category: values.category.trim(), nature }; const rules = values.scope === 'Só este lançamento' ? planning.rules : [{ id: crypto.randomUUID(), text: values.text.trim(), bank: editing.sourceAccountName, ...correction }, ...planning.rules]; onPlanningChange(validatePlanning({ ...planning, overrides: { ...planning.overrides, [editing.id]: correction }, rules })); setEditing(null); }}/ >}
     </div>
   );
 };

@@ -11,6 +11,7 @@ import {
   RefreshCw 
 } from 'lucide-react';
 import { PortfolioHolding, InvestorProfile, BankAccount } from '../types/finance';
+import type { ManualLoan } from '../lib/planning';
 import { FinancialResearch } from './FinancialResearch';
 
 interface AiPortfolioAdvisorModalProps {
@@ -22,6 +23,7 @@ interface AiPortfolioAdvisorModalProps {
   investments: any[];
   creditCards: any[];
   loans: any[];
+  manualLoans: ManualLoan[];
   loansComplete: boolean;
   dataLoading: boolean;
 }
@@ -31,7 +33,7 @@ export const AiPortfolioAdvisorModal: React.FC<AiPortfolioAdvisorModalProps> = (
   onClose,
   holdings,
   investorProfile,
-  bankAccounts, investments, creditCards, loans, loansComplete, dataLoading,
+  bankAccounts, investments, creditCards, loans, manualLoans, loansComplete, dataLoading,
 }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +60,8 @@ export const AiPortfolioAdvisorModal: React.FC<AiPortfolioAdvisorModalProps> = (
             connectedInvestments: investments.filter((asset) => (asset.currencyCode || 'BRL') === 'BRL').reduce((sum, asset) => sum + (Number(asset.balance) || 0), 0),
             creditCardBalance: creditCards.filter((card) => card.currencyCode === 'BRL').reduce((sum, card) => sum + (Number(card.balance) || 0), 0),
             knownLoanBalance: loans.filter((loan) => (loan.currencyCode || 'BRL') === 'BRL' && loan.payments?.contractOutstandingBalance != null).reduce((sum, loan) => sum + Number(loan.payments.contractOutstandingBalance), 0),
+            manualLoanBalance: manualLoans.filter((loan) => !loan.alsoConnected).reduce((sum, loan) => sum + loan.outstanding, 0),
+            manualLoans: manualLoans.filter((loan) => !loan.alsoConnected).map((loan) => ({ outstanding: loan.outstanding, installment: loan.installment, remaining: loan.remaining, nextDue: loan.nextDue })),
             loansReturned: loans.length,
             loansWithoutBalance: loans.filter((loan) => loan.payments?.contractOutstandingBalance == null).length,
             loanQueryComplete: loansComplete,
@@ -109,7 +113,8 @@ Valores resumidos em reais:
 Saldo das contas: ${financialSnapshot.bankBalance}.
 Investimentos conectados: ${financialSnapshot.connectedInvestments}.
 Saldo informado nos cartões: ${financialSnapshot.creditCardBalance}.
-Saldo devedor conhecido de empréstimos: ${financialSnapshot.knownLoanBalance}.
+Saldo devedor conhecido de empréstimos conectados: ${financialSnapshot.knownLoanBalance}.
+Total restante dos empréstimos manuais que não foram marcados como duplicados: ${financialSnapshot.manualLoanBalance}.
 Empréstimos retornados: ${financialSnapshot.loansReturned}; sem saldo devedor informado: ${financialSnapshot.loansWithoutBalance}.
 Consulta de empréstimos completa: ${loansComplete ? 'sim, nos dados disponibilizados pela conexão' : 'não'}.
 Posições cadastradas manualmente: ${totalValue}; distribuição: ${JSON.stringify(allocations)}.
@@ -175,6 +180,7 @@ As posições manuais podem duplicar investimentos conectados; não some automat
                   ['Saldo das contas', financialSnapshot.bankBalance],
                   ['Investimentos conectados', financialSnapshot.connectedInvestments],
                   ['Saldo informado nos cartões', financialSnapshot.creditCardBalance],
+                  ['Empréstimos manuais (informados por você)', financialSnapshot.manualLoanBalance],
                 ].map(([label, value]) => <div key={String(label)} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3"><dt className="text-slate-400">{label}</dt><dd className="mt-1 font-semibold text-white">{Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</dd></div>)}
               </dl>
               {/* Score */}

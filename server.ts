@@ -23,7 +23,7 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 installAuth(app, async (id) => { await pluggyRequest(`/items/${id}`); }, async (id) => (await pluggyRequest(`/investments/${id}`)).itemId);
 
 // Initialize server-side Gemini
@@ -236,9 +236,17 @@ app.get('/api/open-finance/transactions', async (req: Request, res: Response) =>
 
   try {
     const transactions: any[] = [];
+    const unavailableItems: string[] = [];
+    const truncatedItems: string[] = [];
     for (const itemId of ids) {
+      try {
       const accountPage = await pluggyRequest(`/accounts?itemId=${encodeURIComponent(itemId)}&page=1&pageSize=100`);
-      for (const account of accountPage.results || []) {
+      const moreAccounts = await Promise.all(Array.from({ length: Math.max(0, Number(accountPage.totalPages || 1) - 1) }, (_, index) => pluggyRequest(`/accounts?itemId=${encodeURIComponent(itemId)}&page=${index + 2}&pageSize=100`)));
+      const itemAccounts = [...(accountPage.results || []), ...moreAccounts.flatMap((page: any) => page.results || [])];
+      const bankLabel = String(itemAccounts.find((account: any) => account.type === 'BANK')?.marketingName || itemAccounts.find((account: any) => account.type === 'BANK')?.name || 'Conta conectada');
+      const normalized = bankLabel.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const providerBankName = /nubank|nu pagamentos|nu financeira/.test(normalized) ? 'Nubank' : normalized.includes('itau') ? 'Itaú' : normalized.includes('santander') ? 'Santander' : normalized.includes('mercado pago') ? 'Mercado Pago' : normalized.includes('neon') ? 'Neon' : bankLabel;
+      for (const account of itemAccounts) {
         let next: string | null = `/v2/transactions?accountId=${encodeURIComponent(account.id)}`;
         let pagesRead = 0;
         while (next && pagesRead < 100) {
@@ -247,6 +255,8 @@ app.get('/api/open-finance/transactions', async (req: Request, res: Response) =>
             ...transaction,
             providerAccountName: account.marketingName || account.name || 'Conta conectada',
             providerAccountType: account.type,
+            providerBankName,
+            providerItemId: itemId,
           })));
           if (page.next) {
             // Pluggy returns a query string (for example, ?accountId=…&after=…);
@@ -261,9 +271,11 @@ app.get('/api/open-finance/transactions', async (req: Request, res: Response) =>
           }
           pagesRead += 1;
         }
+        if (next) truncatedItems.push(itemId);
       }
+      } catch { unavailableItems.push(itemId); }
     }
-    res.json({ transactions });
+    res.json({ transactions, unavailableItems, truncatedItems, complete: unavailableItems.length === 0 && truncatedItems.length === 0 });
   } catch (error: any) {
     res.status(503).json({ error: error.message || 'Não foi possível carregar as transações da Pluggy.' });
   }
@@ -276,14 +288,17 @@ app.get('/api/open-finance/investments', async (req: Request, res: Response) => 
   if (ids.length === 0) return res.json({ investments: [] });
   try {
     const investments: any[] = [];
+    const unavailableItems: string[] = [];
     for (const itemId of ids) {
+      try {
       const firstPage = await pluggyRequest(`/investments?itemId=${encodeURIComponent(itemId)}&page=1&pageSize=100`);
       const pages = await Promise.all(Array.from({ length: Math.max(0, (Number(firstPage.totalPages) || 1) - 1) }, (_, index) =>
         pluggyRequest(`/investments?itemId=${encodeURIComponent(itemId)}&page=${index + 2}&pageSize=100`)
       ));
       investments.push(...(firstPage.results || []), ...pages.flatMap((page: any) => page.results || []));
+      } catch { unavailableItems.push(itemId); }
     }
-    res.json({ investments });
+    res.json({ investments, unavailableItems, complete: unavailableItems.length === 0 });
   } catch (error: any) {
     res.status(503).json({ error: error.message || 'Não foi possível carregar os investimentos da Pluggy.' });
   }
@@ -312,7 +327,8 @@ app.get('/api/open-finance/loans', async (req: Request, res: Response) => {
         totalPages = Number(result.totalPages) || 1;
         page += 1;
       } while (page <= totalPages && page <= 100);
-      loans.push(...collected);
+      if (page <= totalPages) unavailableItems.push(itemId);
+      loans.push(...collected.map((loan: any) => ({ ...loan, institution: item.connector?.name || 'Instituição conectada' })));
     } catch { unavailableItems.push(itemId); }
   }
   res.json({ loans, complete: ids.length > 0 && unavailableItems.length === 0, unavailableItems, unsupportedItems });
@@ -489,7 +505,7 @@ app.post('/api/ai/portfolio-diagnostic', async (req: Request, res: Response) => 
     const { totalPatrimony, allocations, financialSnapshot = {}, profile = 'Moderado' } = req.body;
     if (!Array.isArray(allocations) && (!allocations || typeof allocations !== 'object')) return res.status(400).json({ error: 'Informe as alocações da carteira.' });
     const prompt = `Faça um diagnóstico educativo e não prescritivo. Posições manuais R$ ${Number(totalPatrimony) || 0}; alocações manuais JSON ${JSON.stringify(allocations)}; resumo financeiro em BRL JSON ${JSON.stringify(financialSnapshot)}; perfil ${String(profile)}. Considere saldos bancários, investimentos conectados, saldo devedor dos empréstimos quando conhecido e saldo dos cartões como obrigações separadas. Não some posições manuais aos investimentos conectados pois podem duplicar os mesmos ativos. Não confunda valor originalmente contratado com saldo devedor atual. Ausência de empréstimos retornados não comprova ausência de dívidas. Se a consulta não estiver completa ou faltarem saldos, explique a limitação. Não use limite de cartão como dinheiro disponível. Não invente rentabilidades, dívidas, garantia ou rendimento. Responda em JSON com diagnostic (texto simples e explicando o impacto das obrigações e os limites dos dados), diversificationScore (number de 0 a 100 baseado apenas na concentração das posições manuais por classe; explique quando não há dados), suggestedActions (array de orientações gerais), dailyYieldHealth (diga que rendimento diário não pode ser aferido com estes dados). Não faça recomendação personalizada de compra/venda.`;
-    const result = await generateFinancialAnalysis(`${prompt} Os valores exatos serão exibidos diretamente pela interface. Nos campos de texto, não repita números, valores monetários ou percentuais; descreva qualitativamente os dados e suas limitações.`, 'diagnostic');
+    const result = await generateFinancialAnalysis(`${prompt} manualLoanBalance e manualLoans são dívidas informadas pelo usuário, sem confirmação bancária. São separadas dos contratos conectados; cadastros marcados como duplicados já foram excluídos desses totais manuais. Não trate essas obrigações como dinheiro disponível. Os valores exatos serão exibidos diretamente pela interface. Nos campos de texto, não repita números, valores monetários ou percentuais; descreva qualitativamente os dados e suas limitações.`, 'diagnostic');
     if (typeof result.diagnostic !== 'string' || !Array.isArray(result.suggestedActions) || typeof result.dailyYieldHealth !== 'string' || !Number.isFinite(result.diversificationScore)) throw new Error('INVALID_RESPONSE');
     result.diversificationScore = Math.min(100, Math.max(0, result.diversificationScore));
     return res.json(result);
