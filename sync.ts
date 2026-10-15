@@ -56,7 +56,7 @@ export function installSync(app: Express) {
       if (!/^[0-9a-f-]{36}$/i.test(itemId) || typeof eventId !== 'string' || eventId.length > 100 || !eventId.length) return res.status(400).json({ error: 'Evento inválido.' });
       if (event === 'transactions/deleted' && (!Array.isArray(transactionIds) || transactionIds.length > 10000 || !transactionIds.every((id: any) => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id)))) return res.status(400).json({ error: 'Transações inválidas.' });
       let users = await owners(itemId);
-      if (!users.length && event === 'item/created') { await attachProviderConnection(itemId); users = await owners(itemId); }
+      if (!users.length && ['item/created', 'item/updated'].includes(event)) { await attachProviderConnection(itemId); users = await owners(itemId); }
       if (!users.length) return res.json({ ignored: true });
       const lease = await claimEvent(eventId, { event, itemId, transactionIds });
       if (lease === 'done') return res.json({ ok: true, duplicate: true });

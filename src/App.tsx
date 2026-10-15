@@ -92,6 +92,26 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
   const [holdings, setHoldings] = useState<PortfolioHolding[]>(initialState.holdings || []);
   const [pluggyItemIds, setPluggyItemIds] = useState<string[]>(initialState.itemIds || []);
+  const connectionBase = useRef<string[]>(initialState.itemIds || []);
+  function receiveConnections(ids: string[]) {
+    const added = ids.filter((id) => !connectionBase.current.includes(id));
+    connectionBase.current = [...new Set([...connectionBase.current, ...ids])];
+    if (added.length) setPluggyItemIds((previous) => [...new Set([...previous, ...added])]);
+  }
+  async function reloadConnections() {
+    const response = await fetch('/api/user/state');
+    if (!response.ok) throw new Error('Não foi possível consultar suas conexões salvas.');
+    const state = await response.json();
+    const ids: string[] = state.itemIds || [];
+    receiveConnections(ids);
+    return ids;
+  }
+  useEffect(() => {
+    const refresh = () => { if (!document.hidden) void reloadConnections().catch((reason) => setProviderSyncError(reason.message)); };
+    const interval = setInterval(refresh, 15000);
+    window.addEventListener('focus', refresh);
+    return () => { clearInterval(interval); window.removeEventListener('focus', refresh); };
+  }, []);
   const [planning, setPlanning] = useState<PlanningData>({ ...emptyPlanning(), ...initialState.planning });
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const saveRevision = useRef(0);
@@ -146,10 +166,12 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
   };
 
   function saveUserData() {
-    const body = JSON.stringify({ holdings, itemIds: pluggyItemIds, profile: investorProfile, planning });
+    const body = JSON.stringify({ holdings, connectionBase: connectionBase.current, itemIds: pluggyItemIds, profile: investorProfile, planning });
     const operation = saveQueue.current.catch(() => {}).then(async () => {
       const response = await fetch('/api/user/state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body });
       if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || 'Não foi possível salvar seus dados. Tente novamente antes de sair.'); }
+      const result = await response.json();
+      if (Array.isArray(result.itemIds)) receiveConnections(result.itemIds);
     });
     saveQueue.current = operation;
     return operation;
@@ -327,7 +349,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
   const handleSyncNow = async () => {
     setIsSyncing(true);
     await fetchRealMarketData();
-    await fetchBankAccounts();
+    try { const ids = await reloadConnections(); await fetchBankAccounts([...new Set([...pluggyItemIds, ...ids])]); } catch (reason: any) { setProviderSyncError(reason.message); }
     setIsSyncing(false);
     showToast('Dados autorizados e indicadores atualizados quando disponíveis.');
   };
@@ -352,7 +374,8 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
     }
     const linked = await fetch('/api/user/connections', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ itemId }) });
     if (!linked.ok) throw new Error((await linked.json()).error || 'Falha ao salvar a conexão.');
-    const nextItemIds = Array.from(new Set([...pluggyItemIds, itemId]));
+    const serverIds = await reloadConnections();
+    const nextItemIds = Array.from(new Set([...pluggyItemIds, ...serverIds, itemId]));
     setPluggyItemIds(nextItemIds);
     const loaded = await fetchBankAccounts(nextItemIds);
     if (!loaded) throw new Error('A conexão foi salva, mas os dados ainda não puderam ser carregados. Aguarde a sincronização e atualize o painel.');
@@ -463,7 +486,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
         {activeTab === 'accounts' && <AccountsSection initialTab={accountsView} accounts={bankAccounts} cards={creditCards} itemIds={pluggyItemIds} privateMode={isPrivateMode} onRemove={handleAccountUnlinked}/>}
 
-        {activeTab === 'assets' && <ConnectedAssets section="investments" accounts={bankAccounts} investments={visibleProviderInvestments} creditCards={[]} isPrivateMode={isPrivateMode} />}
+        {activeTab === 'assets' && <ConnectedAssets snapshots={history.snapshots} section="investments" accounts={bankAccounts} investments={visibleProviderInvestments} creditCards={[]} isPrivateMode={isPrivateMode} />}
 
         {activeTab === 'loans' && <><ManualLoansPanel data={planning} onChange={setPlanning} privateMode={isPrivateMode}/><LoansSection loans={loans} complete={loansComplete} unsupported={loansUnsupported} isPrivateMode={isPrivateMode} onRefresh={() => fetchBankAccounts()} /></>}
         {activeTab === 'connections' && <><SyncStatus data={controls.data} reload={controls.reload}/><ConnectionsSection onReconnect={(id) => { setReconnectItem(id); setIsOpenFinanceConsentOpen(true); }} itemIds={pluggyItemIds} onConnect={() => setIsOpenFinanceConsentOpen(true)} onRemove={(id) => { setPluggyItemIds((items) => items.filter((item) => item !== id)); showToast('Conexão removida do painel. A autorização bancária continua ativa.'); }}/></>}

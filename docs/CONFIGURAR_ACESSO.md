@@ -39,6 +39,16 @@ Se a Pluggy restringir sua aplicação ao fluxo pelo Dashboard, use **Importar c
 
 A autorização de um banco novo continua sendo feita no Meu Pluggy, conforme o guia oficial de uso pessoal. O widget aqui vincula os dados autorizados; não remove essa etapa. O serviço pessoal tem até cinco conexões e atualização a cada 24 horas. Sandbox contém dados simulados e não é usado neste fluxo.
 
+### Inclusão automática de conexões
+
+Com o webhook autenticado ativo, itens MeuPluggy novos recebidos pela aplicação são vinculados automaticamente ao responsável pelo uso pessoal. Isso também funciona quando o Dashboard não envia clientUserId. O servidor valida o item diretamente na Pluggy e não atribui esses dados a outros usuários. Conexões removidas explicitamente do painel não são reativadas por notificações.
+
+O navegador consulta os vínculos salvos a cada 15 segundos enquanto estiver visível e ao recuperar o foco. O salvamento das preferências preserva conexões adicionadas pelo servidor. Não é necessário alterar código ou fazer deploy para adicionar um vínculo novo.
+
+Isso depende de o item existir na aplicação Pluggy e de a notificação chegar. Se um banco aparecer somente no Meu Pluggy, mas ainda não existir na aplicação do Dashboard, conclua a vinculação pelo conector MeuPluggy. A API pessoal não oferece listagem geral de itens para descobrir esse identificador. Não é possível eliminar o consentimento bancário nem prometer importação de uma conta que a aplicação ainda não recebeu.
+
+No modo para vários usuários, o widget do FinPulse cria o item com o identificador do usuário autenticado. O webhook usa esse identificador, conferido na API da Pluggy, para salvar a conexão no cadastro correto. Login Google do FinPulse e login Google do Meu Pluggy não criam esse vínculo por si só.
+
 ### Produto para outras pessoas
 
 Solicite à Pluggy a habilitação da aplicação para seu produto com múltiplos usuários e confirme plano, produtos de dados e bancos disponíveis. O MeuPluggy pessoal permite consultar seus próprios dados; não substitui essa habilitação.

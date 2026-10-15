@@ -1,9 +1,10 @@
 import React from 'react';
+import type { SavedSnapshot } from '../lib/useFinancialHistory';
 import { InvestmentsSection } from './InvestmentsSection';
 import type { BankAccount } from '../types/finance';
 
-export function ConnectedAssets({ investments, creditCards, isPrivateMode, section = 'investments', accounts = [] }: { investments: any[]; creditCards: any[]; isPrivateMode: boolean; section?: 'cards' | 'investments'; accounts?: BankAccount[] }) {
-  if (section === 'investments') return <InvestmentsSection investments={investments} accounts={accounts} privateMode={isPrivateMode}/>;
+export function ConnectedAssets({ investments, creditCards, isPrivateMode, section = 'investments', accounts = [], snapshots = [] }: { investments: any[]; creditCards: any[]; isPrivateMode: boolean; section?: 'cards' | 'investments'; accounts?: BankAccount[]; snapshots?: SavedSnapshot[] }) {
+  if (section === 'investments') return <InvestmentsSection investments={investments} accounts={accounts} privateMode={isPrivateMode} snapshots={snapshots}/>;
   const money = (value: unknown, currency = 'BRL') => isPrivateMode ? '••••••' : value == null ? 'Não informado' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(Number(value));
   return <section className="space-y-4">
     <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 sm:p-5">

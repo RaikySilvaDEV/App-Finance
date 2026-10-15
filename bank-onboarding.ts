@@ -19,14 +19,27 @@ export async function authorizeConnection(itemId: string, user: { id: string; em
 /** Bind newly created provider items only using identity read from the provider. */
 export async function attachProviderConnection(itemId: string) {
   const item = await pluggyRequest(`/items/${itemId}`);
-  const userId = item.clientUserId;
-  if (typeof userId !== 'string' || !/^[a-f0-9]{32}$/.test(userId) || item.connector?.isSandbox) return;
+  if (item.connector?.isSandbox) return;
   await financeStorage.ensure();
-  const rows = financeStorage.sql ? await financeStorage.sql`SELECT id,email FROM users WHERE id=${userId}` : financeStorage.local().prepare('SELECT id,email FROM users WHERE id=?').all(userId);
-  if (!rows.length) return;
-  if (businessConnectionsEnabled()) { if (item.connector?.name === 'MeuPluggy') return; }
-  else if (process.env.PLUGGY_CONNECTION_MODE === 'business' || item.connector?.name !== 'MeuPluggy' || !(await personalOwner(rows[0] as { id: string; email: string }))) return;
-  await appendUserConnection(userId, itemId);
+  let user: { id: string; email: string } | undefined;
+  if (businessConnectionsEnabled()) {
+    const userId = item.clientUserId;
+    if (typeof userId !== 'string' || !/^[a-f0-9]{32}$/.test(userId) || item.connector?.name === 'MeuPluggy') return;
+    const rows = financeStorage.sql ? await financeStorage.sql`SELECT id,email FROM users WHERE id=${userId}` : financeStorage.local().prepare('SELECT id,email FROM users WHERE id=?').all(userId);
+    user = rows[0] as { id: string; email: string } | undefined;
+  } else {
+    if (process.env.PLUGGY_CONNECTION_MODE === 'business' || item.connector?.name !== 'MeuPluggy') return;
+    // Personal Dashboard items may omit clientUserId. Their authenticated
+    // application belongs only to the configured/unique personal owner.
+    const rows = financeStorage.sql ? await financeStorage.sql`SELECT id,email FROM users` : financeStorage.local().prepare('SELECT id,email FROM users').all();
+    for (const candidate of rows) if (await personalOwner(candidate as { id: string; email: string })) {
+      if (user) return;
+      user = candidate as { id: string; email: string } | undefined;
+    }
+    if (item.clientUserId && item.clientUserId !== user?.id) return;
+  }
+  if (!user || (await ownedConnections(user.id)).includes(itemId)) return;
+  await appendUserConnection(user.id, itemId);
 }
 
 export function installBankOnboarding(app: Express) {

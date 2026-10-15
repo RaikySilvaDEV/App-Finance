@@ -216,7 +216,20 @@ export function installAuth(app: Express, validateItem: (id: string, user: Sessi
       const owned = readState(res.locals.user).itemIds || [];
       const migrated = readState(res.locals.user).migrated || false;
       if (state.itemIds.some((id) => !owned.includes(id))) return res.status(403).json({ error: 'Adicione a conexão antes de salvar.' });
-      await saveState(res.locals.user.id, { ...readState(res.locals.user), ...state, planning: state.planning ?? readState(res.locals.user).planning, migrated }); res.json({ ok: true });
+      const base = req.body.connectionBase ?? owned;
+      if (!Array.isArray(base) || base.length > 1000 || !base.every((id) => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id))) throw new Error();
+      const removed = base.filter((id: string) => !state.itemIds.includes(id));
+      const patch = { ...state, planning: state.planning ?? readState(res.locals.user).planning, migrated };
+      // Preserve items attached by callbacks/webhooks after this browser loaded.
+      // Only explicit removals from the browser's known base can remove a link.
+      if (sql) {
+        const rows = await sql`UPDATE users SET state=jsonb_set(state::jsonb || ${JSON.stringify(patch)}::jsonb,'{itemIds}',COALESCE((SELECT jsonb_agg(DISTINCT value) FROM jsonb_array_elements_text(COALESCE(users.state::jsonb->'itemIds','[]'::jsonb) || ${JSON.stringify(state.itemIds)}::jsonb) AS link(value) WHERE NOT (${JSON.stringify(removed)}::jsonb ? value)),'[]'::jsonb))::text WHERE id=${res.locals.user.id} RETURNING state`;
+        return res.json({ ok: true, itemIds: JSON.parse(rows[0].state).itemIds });
+      }
+      const db = localDatabase();
+      const current = JSON.parse((db.prepare('SELECT state FROM users WHERE id=?').get(res.locals.user.id) as any).state || '{}');
+      const itemIds = [...new Set<string>([...(current.itemIds || []), ...state.itemIds])].filter((id) => !removed.includes(id));
+      await saveState(res.locals.user.id, { ...current, ...patch, itemIds }); res.json({ ok: true, itemIds });
     } catch { res.status(400).json({ error: 'Não foi possível salvar os dados.' }); }
   });
   app.post('/api/user/import', async (req, res) => {
