@@ -1,4 +1,5 @@
 import { financeStorage as storage } from './auth.js';
+import { ensureConnectionOwners } from './connection-ownership.js';
 
 export type RecordRow = { record_id: string; kind: string; payload: string; observed_at: number };
 export async function records(userId: string, kind: string): Promise<RecordRow[]> {
@@ -23,8 +24,8 @@ export async function putRecords(userId: string, rows: RecordRow[]) {
 }
 export const record = (id: string, kind: string, value: unknown, at = Date.now()): RecordRow => ({ record_id: id, kind, payload: JSON.stringify(value), observed_at: at });
 export async function owners(itemId: string) {
-  await storage.ensure();
-  const users = storage.sql ? await storage.sql`SELECT id,state FROM users` : storage.local().prepare('SELECT id,state FROM users').all();
+  await ensureConnectionOwners();
+  const users = storage.sql ? await storage.sql`SELECT users.id,users.state FROM users JOIN bank_connections ON bank_connections.user_id=users.id WHERE bank_connections.item_id=${itemId}` : storage.local().prepare('SELECT users.id,users.state FROM users JOIN bank_connections ON bank_connections.user_id=users.id WHERE bank_connections.item_id=?').all(itemId);
   return users.filter((user: any) => (JSON.parse(user.state || '{}').itemIds || []).includes(itemId)) as { id: string; state: string }[];
 }
 

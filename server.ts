@@ -8,6 +8,8 @@ import { readAccounts, readTransactions, readInvestments, readLoans } from './pr
 import { installSync, installSyncUser } from './sync.js';
 import { putRecords, record, records } from './sync-store.js';
 import { classifyBills } from './src/lib/billStatus.js';
+import { authorizeConnection, installBankOnboarding } from './bank-onboarding.js';
+import { businessConnectionsEnabled, personalOwner } from './connection-ownership.js';
 import { providerTransaction } from './src/lib/providerTransaction.js';
 import { generateFinancialAnalysis } from './openai.js';
 import { localAiStatus, researchFinancialTopic, ensureLocalAiStarted, isLocalAiEnabled } from './local-ai.js';
@@ -31,7 +33,8 @@ app.use((req, res, next) => {
 });
 app.use(express.json({ limit: '2mb' }));
 installSync(app);
-installAuth(app, async (id) => { await pluggyRequest(`/items/${id}`); }, async (id) => (await pluggyRequest(`/investments/${id}`)).itemId);
+installAuth(app, authorizeConnection, async (id) => (await pluggyRequest(`/investments/${id}`)).itemId);
+installBankOnboarding(app);
 installSyncUser(app);
 
 // Initialize server-side Gemini
@@ -127,9 +130,10 @@ async function fetchYahooQuote(symbol: string) {
 // READ-ONLY OPEN FINANCE VIA PLUGGY
 // -------------------------------------------------------------
 
-app.get('/api/open-finance/status', (_req: Request, res: Response) => {
+app.get('/api/open-finance/status', async (_req: Request, res: Response) => {
   const configured = Boolean(process.env.PLUGGY_CLIENT_ID && process.env.PLUGGY_CLIENT_SECRET);
-  res.json({ provider: 'Pluggy', configured, mode: 'read_only' });
+  try { res.json({ provider: 'Pluggy', configured, mode: 'read_only', directConnection: configured && businessConnectionsEnabled(), personalImport: await personalOwner(res.locals.user), awaitingBusinessActivation: !businessConnectionsEnabled() }); }
+  catch { res.status(503).json({ error: 'Não foi possível consultar a configuração bancária.' }); }
 });
 
 app.get('/api/open-finance/accounts', async (req, res) => {

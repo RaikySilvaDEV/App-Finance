@@ -5,6 +5,8 @@ import { readAccounts, readTransactions, readInvestments, readLoans } from './pr
 import { pluggyRequest } from './pluggy.js';
 import { providerTransaction } from './src/lib/providerTransaction.js';
 import { brazilDay } from './src/lib/planning.js';
+import { attachProviderConnection } from './bank-onboarding.js';
+import { personalOwner } from './connection-ownership.js';
 
 const publicUrl = 'https://app-finance-ruby-one.vercel.app/api/integrations/pluggy';
 const supported = new Set(['item/created', 'item/updated', 'item/error', 'item/deleted', 'item/waiting_user_input', 'item/waiting_user_action', 'transactions/created', 'transactions/updated', 'transactions/deleted']);
@@ -53,7 +55,8 @@ export function installSync(app: Express) {
       if (!supported.has(event)) return res.json({ ignored: true });
       if (!/^[0-9a-f-]{36}$/i.test(itemId) || typeof eventId !== 'string' || eventId.length > 100 || !eventId.length) return res.status(400).json({ error: 'Evento inválido.' });
       if (event === 'transactions/deleted' && (!Array.isArray(transactionIds) || transactionIds.length > 10000 || !transactionIds.every((id: any) => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id)))) return res.status(400).json({ error: 'Transações inválidas.' });
-      const users = await owners(itemId);
+      let users = await owners(itemId);
+      if (!users.length && event === 'item/created') { await attachProviderConnection(itemId); users = await owners(itemId); }
       if (!users.length) return res.json({ ignored: true });
       const lease = await claimEvent(eventId, { event, itemId, transactionIds });
       if (lease === 'done') return res.json({ ok: true, duplicate: true });
@@ -102,7 +105,7 @@ export function installSyncUser(app: Express) {
     } catch { res.status(503).json({ error: 'Não foi possível consultar a sincronização.' }); }
   });
   app.post('/api/user/sync/activate', async (_req, res) => {
-    try { res.json(await activatePluggySync()); }
+    try { if (!(await personalOwner(res.locals.user))) return res.status(403).json({ error: 'A ativação da integração é administrada pelo responsável pelo sistema.' }); res.json(await activatePluggySync()); }
     catch { res.status(503).json({ error: 'Não foi possível ativar a sincronização na Pluggy. Verifique as credenciais da aplicação e tente novamente.' }); }
   });
 }

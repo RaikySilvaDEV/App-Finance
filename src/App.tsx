@@ -130,6 +130,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   
   // Movement & Bank Modals
+  const [reconnectItem, setReconnectItem] = useState<string | undefined>();
   const [isOpenFinanceConsentOpen, setIsOpenFinanceConsentOpen] = useState<boolean>(false);
   const [isAcademyModalOpen, setIsAcademyModalOpen] = useState<boolean>(false);
 
@@ -354,10 +355,10 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
     const nextItemIds = Array.from(new Set([...pluggyItemIds, itemId]));
     setPluggyItemIds(nextItemIds);
     const loaded = await fetchBankAccounts(nextItemIds);
-    if (!loaded) throw new Error('Não consegui carregar este itemId. Confira se é uma conexão do conector MeuPluggy e se suas credenciais pertencem à mesma aplicação demo.');
+    if (!loaded) throw new Error('A conexão foi salva, mas os dados ainda não puderam ser carregados. Aguarde a sincronização e atualize o painel.');
 
     setPluggyItemIds(nextItemIds);
-    showToast('Conexão MeuPluggy adicionada ao painel.');
+    showToast('Banco conectado ao painel.');
   };
 
   const handleAccountUnlinked = async (accountId: string) => {
@@ -465,7 +466,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         {activeTab === 'assets' && <ConnectedAssets section="investments" accounts={bankAccounts} investments={visibleProviderInvestments} creditCards={[]} isPrivateMode={isPrivateMode} />}
 
         {activeTab === 'loans' && <><ManualLoansPanel data={planning} onChange={setPlanning} privateMode={isPrivateMode}/><LoansSection loans={loans} complete={loansComplete} unsupported={loansUnsupported} isPrivateMode={isPrivateMode} onRefresh={() => fetchBankAccounts()} /></>}
-        {activeTab === 'connections' && <><SyncStatus data={controls.data} reload={controls.reload}/><ConnectionsSection itemIds={pluggyItemIds} onConnect={() => setIsOpenFinanceConsentOpen(true)} onRemove={(id) => { setPluggyItemIds((items) => items.filter((item) => item !== id)); showToast('Conexão removida do painel. A autorização no banco continua sendo gerenciada no Meu Pluggy.'); }}/></>}
+        {activeTab === 'connections' && <><SyncStatus data={controls.data} reload={controls.reload}/><ConnectionsSection onReconnect={(id) => { setReconnectItem(id); setIsOpenFinanceConsentOpen(true); }} itemIds={pluggyItemIds} onConnect={() => setIsOpenFinanceConsentOpen(true)} onRemove={(id) => { setPluggyItemIds((items) => items.filter((item) => item !== id)); showToast('Conexão removida do painel. A autorização bancária continua ativa.'); }}/></>}
 
         {activeTab === 'ledger' && (<>
         {/* 3. Real Movement Ledger (Extrato de Transferências e Aportes) */}
@@ -554,8 +555,9 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
       <OpenFinanceConsentModal
         isOpen={isOpenFinanceConsentOpen}
+        updateItem={reconnectItem}
         onClose={() => {
-          setIsOpenFinanceConsentOpen(false);
+          setIsOpenFinanceConsentOpen(false); setReconnectItem(undefined);
         }}
         onConnected={handlePluggyConnected}
       />

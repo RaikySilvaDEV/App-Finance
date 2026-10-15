@@ -8,6 +8,8 @@ import { neon } from '@neondatabase/serverless';
 import type { Express, Request, Response } from 'express';
 import { validatePlanning } from './src/lib/planning.js';
 import { installHistory } from './history.js';
+import { installGoogleAuth } from './google-auth.js';
+import { ownedConnections, appendUserConnection } from './connection-ownership.js';
 
 type UserRecord = { id: string; email: string; password: string; state: string };
 type SessionUser = Pick<UserRecord, 'id' | 'email' | 'state'>;
@@ -67,10 +69,17 @@ async function userFor(req: Request): Promise<SessionUser | null> {
   await ensureDatabase();
   if (sql) {
     const rows = await sql`SELECT users.id, users.email, users.state FROM users JOIN sessions ON users.id = sessions.user_id WHERE sessions.token = ${digest(token)} AND sessions.expires > ${Date.now()} LIMIT 1`;
-    return (rows[0] as SessionUser | undefined) || null;
+    return sanitizeSession((rows[0] as SessionUser | undefined) || null);
   }
   const row = localDatabase().prepare('SELECT users.id, users.email, users.state FROM users JOIN sessions ON users.id = sessions.user_id WHERE sessions.token = ? AND sessions.expires > ?').get(digest(token), Date.now());
-  return (row as SessionUser | undefined) || null;
+  return sanitizeSession((row as SessionUser | undefined) || null);
+}
+
+async function sanitizeSession(user: SessionUser | null): Promise<SessionUser | null> {
+  if (!user) return null;
+  const allowed = new Set(await ownedConnections(user.id));
+  const state = JSON.parse(user.state || '{}');
+  return { ...user, state: JSON.stringify({ ...state, itemIds: (state.itemIds || []).filter((id: string) => allowed.has(id)) }) };
 }
 
 async function createSession(res: Response, id: string) {
@@ -136,13 +145,15 @@ function isDuplicateUser(error: unknown) {
     && ['23505', 'SQLITE_CONSTRAINT_UNIQUE'].includes(String(error.code));
 }
 
-export function installAuth(app: Express, validateItem: (id: string) => Promise<void>, investmentItem: (id: string) => Promise<string>) {
+export function installAuth(app: Express, validateItem: (id: string, user: SessionUser) => Promise<void>, investmentItem: (id: string) => Promise<string>) {
   app.use('/api', (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers.origin) {
       try { if (new URL(req.headers.origin).host !== req.headers.host) return res.status(403).json({ error: 'Origem inválida.' }); } catch { return res.status(403).json({ error: 'Origem inválida.' }); }
     }
     next();
   });
+  installGoogleAuth(app, { ensure: ensureDatabase, sql, local: localDatabase, userFor, findUser, createUser, createSession });
   app.post('/api/auth/:action', async (req, res) => {
     const action = req.params.action;
     if (action === 'logout') {
@@ -213,7 +224,7 @@ export function installAuth(app: Express, validateItem: (id: string) => Promise<
       const state = safeState(req.body);
       const existing = readState(res.locals.user);
       if (existing.migrated) return res.status(409).json({ error: 'Esta conta já importou os dados do navegador.' });
-      for (const id of state.itemIds) await validateItem(id);
+      for (const id of state.itemIds) await validateItem(id, res.locals.user);
       const combined = { ...state, planning: existing.planning ?? state.planning, holdings: [...(existing.holdings || []), ...state.holdings], itemIds: [...new Set([...(existing.itemIds || []), ...state.itemIds])], migrated: true };
       await saveState(res.locals.user.id, combined); res.json(combined);
     } catch { res.status(400).json({ error: 'Falha ao importar. Seus dados antigos continuam neste navegador.' }); }
@@ -222,10 +233,8 @@ export function installAuth(app: Express, validateItem: (id: string) => Promise<
     const id = String(req.body.itemId || '');
     if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ error: 'Conexão inválida.' });
     try {
-      await validateItem(id);
-      const state = readState(res.locals.user);
-      state.itemIds = [...new Set([...(state.itemIds || []), id])];
-      await saveState(res.locals.user.id, state); res.json({ ok: true });
+      await validateItem(id, res.locals.user);
+      await appendUserConnection(res.locals.user.id, id); res.json({ ok: true });
     } catch { res.status(400).json({ error: 'Não foi possível validar esta conexão.' }); }
   });
   installHistory(app, { ensure: ensureDatabase, sql, local: localDatabase });
