@@ -6,7 +6,8 @@ import { installAuth } from './auth.js';
 import { pluggyRequest } from './pluggy.js';
 import { readAccounts, readTransactions, readInvestments, readLoans } from './provider-data.js';
 import { installSync, installSyncUser } from './sync.js';
-import { putRecords, record } from './sync-store.js';
+import { putRecords, record, records } from './sync-store.js';
+import { classifyBills } from './src/lib/billStatus.js';
 import { providerTransaction } from './src/lib/providerTransaction.js';
 import { generateFinancialAnalysis } from './openai.js';
 import { localAiStatus, researchFinancialTopic, ensureLocalAiStarted, isLocalAiEnabled } from './local-ai.js';
@@ -178,6 +179,7 @@ app.get('/api/open-finance/bills', async (req, res) => {
   try {
     const { accounts, creditCards, unavailableItems } = await readAccounts(ids);
     const bills: any[] = []; let unavailable = unavailableItems?.length || 0;
+    const incompleteAccounts: string[] = [];
     await Promise.all(creditCards.map(async (card) => {
       try {
         let page = 1, total = 1;
@@ -187,11 +189,23 @@ app.get('/api/open-finance/bills', async (req, res) => {
           bills.push(...(result.results || []).map((bill: any) => ({ ...bill, bank, cardName: card.name, cardLastFour: card.number, accountId: card.id, providerItemId: card.providerItemId })));
           total = Number(result.totalPages) || 1; page++;
         } while (page <= total && page <= 100);
-        if (page <= total) unavailable++;
-      } catch { unavailable++; }
+        if (page <= total) { unavailable++; incompleteAccounts.push(card.id); }
+      } catch { unavailable++; incompleteAccounts.push(card.id); }
     }));
-    res.json({ bills: [...new Map(bills.map((bill) => [bill.id, bill])).values()].sort((a, b) => String(b.dueDate).localeCompare(String(a.dueDate))), unavailable });
+    const confirmations = (await records(res.locals.user.id, 'bill_payment')).map((row) => JSON.parse(row.payload));
+    const unique = [...new Map(bills.map((bill) => [bill.id, bill])).values()];
+    res.json({ bills: classifyBills(unique, confirmations, incompleteAccounts).sort((a, b) => String(b.dueDate).localeCompare(String(a.dueDate))), unavailable });
   } catch { res.status(503).json({ error: 'Não foi possível consultar as faturas.' }); }
+});
+
+app.put('/api/user/bill-payment', async (req, res) => {
+  const { itemId, billId, status } = req.body || {};
+  const owned = JSON.parse(res.locals.user.state || '{}').itemIds || [];
+  if (typeof itemId !== 'string' || !owned.includes(itemId) || typeof billId !== 'string' || !/^[0-9a-f-]{36}$/i.test(billId) || !['paid', 'unpaid', 'unknown'].includes(status)) return res.status(400).json({ error: 'Confirmação de fatura inválida.' });
+  try {
+    await putRecords(res.locals.user.id, [record(`bill_payment:${itemId}:${billId}`, 'bill_payment', { itemId, billId, status, updatedAt: new Date().toISOString() })]);
+    res.json({ ok: true });
+  } catch { res.status(503).json({ error: 'Não foi possível salvar sua confirmação.' }); }
 });
 
 app.get('/api/open-finance/investment-transactions', async (req: Request, res: Response) => {
