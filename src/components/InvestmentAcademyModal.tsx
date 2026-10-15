@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   X, 
   GraduationCap, 
@@ -20,7 +20,9 @@ import {
   Clock,
   Layers,
   Award,
-  RotateCcw
+  RotateCcw,
+  Search,
+  ArrowLeft
 } from 'lucide-react';
 
 interface InvestmentAcademyModalProps {
@@ -40,6 +42,31 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'trilha' | 'simulador' | 'glossario' | 'quiz'>('trilha');
   const [selectedModule, setSelectedModule] = useState<number>(0);
+  const [glossarySearch, setGlossarySearch] = useState('');
+  const [quizStep, setQuizStep] = useState(0);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    dialogRef.current?.querySelector<HTMLElement>('button')?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); }
+      if (event.key !== 'Tab') return;
+      const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input, select, summary, [tabindex="0"]') || [])].filter((element) => element.getClientRects().length > 0);
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => { document.body.style.overflow = previousOverflow; document.removeEventListener('keydown', onKey); previousFocus?.focus(); };
+  }, [isOpen]);
+  useEffect(() => { if (contentRef.current) contentRef.current.scrollTop = 0; }, [activeTab, selectedModule, quizStep]);
+
 
   // Simulator State
   const [initialAmount, setInitialAmount] = useState<number>(1000);
@@ -462,199 +489,32 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
     { term: 'B3 (Brasil, Bolsa, Balcão)', desc: 'A bolsa oficial de valores do Brasil, sediada em São Paulo, onde são negociadas ações, FIIs, BDRs e ETFs.' },
   ];
 
+  const lessonTitles = ['Comece pelo essencial', 'Entenda a renda fixa', 'Fundos imobiliários', 'Ações e dividendos', 'Conecte seus bancos'];
+  const lessonDescriptions = ['Inflação e organização do dinheiro', 'Produtos, prazos e proteção', 'Como funcionam os FIIs', 'Participação em empresas', 'Consentimento e compartilhamento'];
+  const searchTerm = glossarySearch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const filteredGlossary = glossary.filter((item) => (item.term + ' ' + item.desc).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(searchTerm));
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
-      <div 
-        className="relative w-full max-w-4xl bg-[#101012] border border-slate-800 rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[94vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Top Header */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-900/90">
-          <div className="flex items-center space-x-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-amber-500 via-emerald-500 to-cyan-400 p-0.5 flex items-center justify-center shadow-lg shadow-emerald-500/15">
-              <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-                <GraduationCap className="w-6 h-6 text-emerald-400" />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h2 className="text-base sm:text-lg font-extrabold text-white">
-                  Academia do Investidor Iniciante
-                </h2>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  Guia para Leigos
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">
-                Treinamento prático antes de começar a investir — tudo explicado do zero sem termos complicados
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-700/60 transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex border-b border-slate-800 bg-slate-950/60 p-1.5 overflow-x-auto text-xs">
-          <button
-            onClick={() => setActiveTab('trilha')}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-              activeTab === 'trilha'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
-            }`}
-          >
-            <BookOpen className="w-4 h-4" />
-            <span>Trilha de Aprendizado (5 Aulas)</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('simulador')}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-              activeTab === 'simulador'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
-            }`}
-          >
-            <Calculator className="w-4 h-4" />
-            <span>Simulador de Juros Compostos (Didático)</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('quiz')}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-              activeTab === 'quiz'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
-            }`}
-          >
-            <Award className="w-4 h-4" />
-            <span>Quiz de Certificação ({Object.keys(quizAnswers).length}/4)</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('glossario')}
-            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-              activeTab === 'glossario'
-                ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
-                : 'text-slate-400 hover:text-white hover:bg-slate-900'
-            }`}
-          >
-            <HelpCircle className="w-4 h-4" />
-            <span>Glossário Descomplicado</span>
-          </button>
-        </div>
-
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-0 backdrop-blur-sm sm:p-5" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="academy-title" className="academy-dialog flex h-[100dvh] w-full min-w-0 flex-col overflow-hidden border-slate-800 bg-[#101012] shadow-2xl sm:h-[min(88dvh,850px)] sm:max-w-5xl sm:rounded-2xl sm:border">
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-800 px-5 py-5 sm:px-7">
+          <div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-300"><BookOpen className="h-5 w-5"/></div><div className="min-w-0"><h2 id="academy-title" className="text-base font-semibold text-white">Aprender</h2><p className="mt-1 text-xs text-slate-500">Um passo de cada vez, no seu ritmo.</p></div></div>
+          <button onClick={onClose} aria-label="Fechar Aprender" className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-white/5 hover:text-white"><X className="h-5 w-5"/></button>
+        </header>
+        <nav aria-label="Conteúdos de Aprender" className="grid shrink-0 grid-cols-4 gap-1 border-b border-slate-800 px-3 py-2 sm:flex sm:px-6">
+          {([{ id: 'trilha', label: 'Aulas', Icon: BookOpen }, { id: 'simulador', label: 'Simulador', Icon: Calculator }, { id: 'quiz', label: 'Quiz', Icon: HelpCircle }, { id: 'glossario', label: 'Glossário', Icon: Layers }] as const).map(({ id, label, Icon }) => <button key={id} onClick={() => setActiveTab(id)} aria-current={activeTab === id ? 'page' : undefined} className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-[11px] font-medium transition-colors sm:px-4 sm:text-xs ${activeTab === id ? 'bg-white/[0.06] text-white' : 'text-slate-500 hover:bg-white/[0.03] hover:text-slate-300'}`}><Icon className={`hidden h-3.5 w-3.5 min-[360px]:block ${activeTab === id ? 'text-rose-300' : ''}`}/>{label}</button>)}
+        </nav>
+        <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
           {/* TAB 1: TRILHA DE APRENDIZADO */}
-          {activeTab === 'trilha' && (
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-              {/* Module selector sidebar */}
-              <div className="md:col-span-4 space-y-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 px-1 block mb-2">
-                  Módulos de Formação
-                </span>
-                {modules.map((m) => {
-                  const Icon = m.icon;
-                  const isSelected = selectedModule === m.id;
-                  return (
-                    <button
-                      key={m.id}
-                      onClick={() => setSelectedModule(m.id)}
-                      className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-                        isSelected
-                          ? 'bg-emerald-500/10 border-emerald-500/40 text-white shadow-sm'
-                          : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                      }`}
-                    >
-                      <div className="flex items-center space-x-2.5 pr-2">
-                        <div className={`p-2 rounded-lg ${isSelected ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-300'}`}>
-                          <Icon className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-white line-clamp-1">{m.title}</div>
-                          <span className="text-[10px] text-slate-400">{m.tag}</span>
-                        </div>
-                      </div>
-                      <ChevronRight className={`w-4 h-4 shrink-0 transition-transform ${isSelected ? 'text-emerald-400 translate-x-0.5' : 'text-slate-600'}`} />
-                    </button>
-                  );
-                })}
-
-                <div className="pt-3">
-                  <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
-                    <span className="text-amber-400 font-bold block mb-1 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      Dica de ouro:
-                    </span>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Não tente investir em tudo de uma vez. Comece garantindo sua <strong>Reserva de Emergência</strong> em Renda Fixa com liquidez diária antes de avançar para FIIs ou Ações.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Module Main Reading View */}
-              <div className="md:col-span-8 bg-slate-950/80 border border-slate-800/90 rounded-2xl p-5 sm:p-6 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-800">
-                    <div>
-                      <span className="text-[11px] font-bold uppercase text-emerald-400 tracking-wider">
-                        {modules[selectedModule].tag}
-                      </span>
-                      <h3 className="text-lg font-extrabold text-white mt-0.5">
-                        {modules[selectedModule].title}
-                      </h3>
-                      <p className="text-xs text-slate-400 mt-1">
-                        {modules[selectedModule].subtitle}
-                      </p>
-                    </div>
-                  </div>
-
-                  {modules[selectedModule].content}
-                </div>
-
-                {/* Module Navigation Footer */}
-                <div className="flex items-center justify-between pt-6 mt-6 border-t border-slate-800/80">
-                  <button
-                    onClick={() => setSelectedModule(Math.max(0, selectedModule - 1))}
-                    disabled={selectedModule === 0}
-                    className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-                  >
-                    ← Módulo Anterior
-                  </button>
-
-                  <span className="text-xs text-slate-500 font-mono">
-                    {selectedModule + 1} de {modules.length}
-                  </span>
-
-                  {selectedModule < modules.length - 1 ? (
-                    <button
-                      onClick={() => setSelectedModule(selectedModule + 1)}
-                      className="px-4 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
-                    >
-                      <span>Próximo Módulo</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => setActiveTab('simulador')}
-                      className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-xs flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>Ir para o Simulador</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          {activeTab === 'trilha' && <div className="grid min-w-0 gap-5 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)]">
+            <aside className="min-w-0"><div className="mb-4 flex items-center justify-between px-1"><h3 className="text-xs font-medium text-slate-400">Sua trilha</h3><span className="text-[10px] text-slate-500">{modules.length} aulas</span></div>
+              <div className="flex gap-2 overflow-x-auto pb-2 md:flex-col" aria-label="Aulas disponíveis">{modules.map((module, index) => { const selected = selectedModule === module.id; return <button key={module.id} onClick={() => setSelectedModule(module.id)} aria-current={selected ? 'step' : undefined} className={`flex w-52 shrink-0 items-center gap-3 rounded-xl border p-3 text-left transition-colors md:w-full ${selected ? 'border-rose-400/25 bg-rose-500/[0.06]' : 'border-transparent hover:bg-white/[0.025]'}`}><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-medium ${selected ? 'bg-rose-500/10 text-rose-300' : 'bg-white/[0.035] text-slate-500'}`}>{String(index + 1).padStart(2, '0')}</span><span className="min-w-0"><span className={`block text-xs font-medium ${selected ? 'text-white' : 'text-slate-400'}`}>{lessonTitles[index]}</span><span className="mt-1 block text-[10px] leading-relaxed text-slate-500">{lessonDescriptions[index]}</span></span></button>; })}</div>
+              <div className="mt-5 hidden border-t border-slate-800 px-1 pt-4 md:block"><p className="text-[11px] leading-relaxed text-slate-500">Explore uma aula por vez. Use o simulador para praticar e o glossário para tirar dúvidas.</p></div>
+            </aside>
+            <article className="min-w-0 rounded-xl border border-slate-800 bg-[#121214] p-4 sm:p-6"><div className="mb-6 border-b border-slate-800 pb-5"><p className="text-[10px] font-medium uppercase tracking-[0.12em] text-rose-300">Aula {selectedModule + 1} de {modules.length}</p><h3 className="mt-2 text-xl font-semibold tracking-tight text-white">{lessonTitles[selectedModule]}</h3><p className="mt-2 text-xs leading-relaxed text-slate-500">{lessonDescriptions[selectedModule]}</p></div>
+              <div className="academy-reading">{modules[selectedModule].content}</div>
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-5"><button onClick={() => setSelectedModule(Math.max(0, selectedModule - 1))} disabled={selectedModule === 0} className="inline-flex items-center gap-2 rounded-lg px-2 py-2.5 text-xs text-slate-400 hover:text-white disabled:opacity-30"><ArrowLeft className="h-3.5 w-3.5"/>Anterior</button><button onClick={() => selectedModule < modules.length - 1 ? setSelectedModule(selectedModule + 1) : setActiveTab('quiz')} className="inline-flex items-center gap-2 rounded-lg bg-rose-400 px-4 py-2.5 text-xs font-semibold text-white hover:bg-rose-500">{selectedModule < modules.length - 1 ? 'Próxima aula' : 'Praticar no quiz'}<ArrowRight className="h-3.5 w-3.5"/></button></div>
+            </article>
+          </div>}
 
           {/* TAB 2: SIMULADOR REAL DE JUROS COMPOSTOS & IR */}
           {activeTab === 'simulador' && (
@@ -886,10 +746,10 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
                 <div>
                   <h3 className="text-sm font-bold text-white flex items-center gap-2">
                     <Award className="w-4 h-4 text-amber-400" />
-                    Teste Seus Conhecimentos Básicos de Investimento
+                    Pratique o que aprendeu
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Responda às 4 perguntas práticas para verificar se você já domina os fundamentos antes de aportar seu primeiro real.
+                    Uma pergunta por vez, com a explicação de cada resposta.
                   </p>
                 </div>
 
@@ -901,7 +761,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
               </div>
 
               <div className="space-y-4">
-                {quizQuestions.map((q, idx) => {
+                {quizQuestions.slice(quizStep, quizStep + 1).map((q) => {
                   const userAnswer = quizAnswers[q.id];
                   const hasAnswered = userAnswer !== undefined;
                   const isCorrect = userAnswer === q.correctIndex;
@@ -913,7 +773,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
                     >
                       <div className="flex items-start space-x-2">
                         <span className="w-6 h-6 rounded-full bg-slate-800 text-slate-300 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                          {idx + 1}
+                          {quizStep + 1}
                         </span>
                         <h4 className="text-xs sm:text-sm font-bold text-white">
                           {q.question}
@@ -960,15 +820,16 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
                 })}
               </div>
 
+              <div className="flex items-center justify-between gap-3"><button disabled={quizStep === 0} onClick={() => setQuizStep((step) => Math.max(0, step - 1))} className="rounded-lg px-3 py-2 text-xs text-slate-400 disabled:opacity-30">Anterior</button><span className="text-xs text-slate-500">Questão {quizStep + 1} de {quizQuestions.length}</span><button disabled={quizStep === quizQuestions.length - 1} onClick={() => setQuizStep((step) => Math.min(quizQuestions.length - 1, step + 1))} className="rounded-lg px-3 py-2 text-xs text-rose-300 disabled:opacity-30">Próxima</button></div>
               {/* Quiz Submit & Results */}
               <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div>
                   <h4 className="text-sm font-bold text-white">
                     {Object.keys(quizAnswers).length === quizQuestions.length
                       ? getScore() === 4
-                        ? '🎉 Parabéns! Você gabaritou o teste de fundamentos!'
+                        ? 'Você acertou todas as perguntas!'
                         : `Você acertou ${getScore()} de ${quizQuestions.length} questões.`
-                      : 'Responda a todas as 4 questões acima para desbloquear seu selo de iniciante.'}
+                      : 'Continue pelas perguntas para ver seu resultado.'}
                   </h4>
                   <p className="text-xs text-slate-400 mt-0.5">
                     Revise os módulos da Trilha se tiver qualquer dúvida sobre títulos públicos, FIIs ou prazos.
@@ -977,7 +838,7 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
 
                 <div className="flex items-center space-x-2 shrink-0">
                   <button
-                    onClick={() => { setQuizAnswers({}); setQuizSubmitted(false); }}
+                    onClick={() => { setQuizAnswers({}); setQuizSubmitted(false); setQuizStep(0); }}
                     className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400 hover:text-white cursor-pointer"
                     title="Recomeçar Quiz"
                   >
@@ -999,48 +860,10 @@ export const InvestmentAcademyModal: React.FC<InvestmentAcademyModalProps> = ({
           )}
 
           {/* TAB 4: GLOSSÁRIO */}
-          {activeTab === 'glossario' && (
-            <div className="space-y-4">
-              <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <HelpCircle className="w-4 h-4 text-cyan-400" />
-                  Dicionário do Investidor Sem Rodeios
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Termos técnicos explicados como se estivéssemos tomando um café.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {glossary.map((item, idx) => (
-                  <div key={idx} className="bg-slate-900/70 border border-slate-800 p-4 rounded-xl">
-                    <h4 className="text-xs font-bold text-emerald-400 mb-1">
-                      {item.term}
-                    </h4>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      {item.desc}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {activeTab === 'glossario' && <div className="mx-auto max-w-2xl space-y-5"><div><h3 className="text-lg font-semibold text-white">Termos sem complicação</h3><p className="mt-2 text-xs text-slate-500">Encontre uma palavra e abra sua explicação.</p></div><label className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3"><Search className="h-4 w-4 shrink-0 text-slate-500"/><input aria-label="Buscar no glossário" type="search" value={glossarySearch} onChange={(event) => setGlossarySearch(event.target.value)} placeholder="Buscar termo…" className="w-full min-w-0 bg-transparent text-sm text-white outline-none placeholder:text-slate-600"/></label><div className="divide-y divide-slate-800 rounded-xl border border-slate-800">{filteredGlossary.map((item) => <details key={item.term} name="academy-glossary" className="group p-4"><summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-slate-200">{item.term}<ChevronRight className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-90"/></summary><p className="mt-3 text-sm leading-relaxed text-slate-400">{item.desc}</p></details>)}{!filteredGlossary.length && <p role="status" className="p-5 text-sm text-slate-500">Nenhum termo encontrado. Tente outra palavra.</p>}</div></div>}
         </div>
 
-        {/* Modal Bottom Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-900/80 flex items-center justify-between">
-          <div className="flex items-center space-x-2 text-xs text-slate-400">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>Educação Financeira alinhada aos padrões CVM e Banco Central do Brasil</span>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition-colors cursor-pointer"
-          >
-            Fechar Academia
-          </button>
-        </div>
+        <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-800 px-5 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] sm:px-7"><span className="text-[10px] text-slate-600">FinPulse · Aprender</span><button onClick={onClose} className="rounded-lg px-3 py-2 text-xs text-slate-400 hover:bg-white/5 hover:text-white">Voltar ao meu painel</button></footer>
       </div>
     </div>
   );
