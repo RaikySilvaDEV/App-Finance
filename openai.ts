@@ -1,4 +1,4 @@
-import { generateLocalAnalysis } from './local-ai';
+import { generateLocalAnalysis, isLocalAiEnabled } from './local-ai';
 const schemas = {
   diagnostic: {
     type: 'object', additionalProperties: false,
@@ -10,11 +10,16 @@ const schemas = {
     properties: { ticker: { type: 'string' }, riskScore: { type: 'number', minimum: 1, maximum: 10 }, riskLevel: { type: 'string' }, liquidityTerm: { type: 'string' }, executiveVerdict: { type: 'string' }, pros: { type: 'array', items: { type: 'string' } }, cons: { type: 'array', items: { type: 'string' } }, macroSensitivity: { type: 'object', additionalProperties: false, properties: { selicUp: { type: 'string' }, inflationUp: { type: 'string' }, exchangeRate: { type: 'string' } }, required: ['selicUp', 'inflationUp', 'exchangeRate'] } },
     required: ['ticker', 'riskScore', 'riskLevel', 'liquidityTerm', 'executiveVerdict', 'pros', 'cons', 'macroSensitivity'],
   },
+  research: {
+    type: 'object', additionalProperties: false,
+    properties: { answer: { type: 'string' } },
+    required: ['answer'],
+  },
 };
 export async function generateFinancialAnalysis(prompt: string, type: keyof typeof schemas): Promise<any> {
-  if (process.env.AI_PROVIDER === 'ollama') return generateLocalAnalysis(prompt, schemas[type]);
+  if (isLocalAiEnabled()) return generateLocalAnalysis(prompt, schemas[type]);
   const key = process.env.OPENAI_API_KEY;
-  if (!key) throw Object.assign(new Error('Configure OPENAI_API_KEY no .env para ativar a análise com OpenAI.'), { status: 503 });
+  if (!key) throw Object.assign(new Error('Configure OPENAI_API_KEY nas variáveis de ambiente para ativar a análise com OpenAI.'), { status: 503 });
   let response: Response;
   try {
     response = await fetch('https://api.openai.com/v1/responses', {

@@ -15,6 +15,10 @@ export function AuthGate({ children }: { children: (state: SavedState, user: Use
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [importPending, setImportPending] = useState(false);
+  async function responseError(response: Response, fallback: string) {
+    const data = await response.json().catch(() => ({}));
+    return new Error(data.error || `${fallback} (HTTP ${response.status}).`);
+  }
   async function load(nextUser: User) {
     const response = await fetch('/api/user/state');
     if (!response.ok) throw new Error('Não foi possível carregar seus dados.');
@@ -25,10 +29,10 @@ export function AuthGate({ children }: { children: (state: SavedState, user: Use
   }
   useEffect(() => {
     fetch('/api/auth/me').then(async (response) => {
-      if (!response.ok) throw new Error('Servidor indisponível.');
+      if (!response.ok) throw await responseError(response, 'Não foi possível conectar ao servidor');
       const data = await response.json();
       if (data.user) await load(data.user);
-    }).catch((reason) => setError(reason.message)).finally(() => setChecking(false));
+    }).catch((reason) => setError(reason instanceof TypeError ? 'Não foi possível conectar à API do servidor. Confira a implantação e tente novamente.' : reason.message)).finally(() => setChecking(false));
   }, []);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError('');

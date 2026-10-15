@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { installAuth } from './auth';
 import { generateFinancialAnalysis } from './openai';
-import { localAiStatus, researchFinancialTopic, ensureLocalAiStarted } from './local-ai';
+import { localAiStatus, researchFinancialTopic, ensureLocalAiStarted, isLocalAiEnabled } from './local-ai';
 
 dotenv.config();
 
@@ -15,7 +15,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
 
-const app = express();
+export const app = express();
 // Keep local browser storage on the same origin when opening either loopback alias.
 app.use((req, res, next) => {
   if (!isProduction && req.hostname === 'localhost' && (req.method === 'GET' || req.method === 'HEAD')) {
@@ -455,17 +455,20 @@ app.get('/api/market/quotes-batch', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/ai/status', async (_req, res) => res.json(process.env.AI_PROVIDER === 'ollama' ? await localAiStatus() : { configured: Boolean(process.env.OPENAI_API_KEY), provider: 'openai' }));
+app.get('/api/ai/status', async (_req, res) => res.json(isLocalAiEnabled() ? await localAiStatus() : { configured: Boolean(process.env.OPENAI_API_KEY), provider: 'openai' }));
 app.post('/api/ai/research', async (req, res) => {
   const question = String(req.body.question || '').trim();
   if (question.length < 5 || question.length > 400) return res.status(400).json({ error: 'Escreva uma pergunta de 5 a 400 caracteres.' });
-  try { return res.json(await researchFinancialTopic(question)); }
+  try {
+    const generateAnswer = isLocalAiEnabled() ? undefined : (prompt: string) => generateFinancialAnalysis(prompt, 'research');
+    return res.json(await researchFinancialTopic(question, generateAnswer));
+  }
   catch (error: any) { return res.status(error.status || 503).json({ error: error.message || 'Não foi possível concluir a pesquisa.' }); }
 });
 
 // Grounded AI Risk Analysis with OpenAI
 app.post('/api/ai/analyze-risk', async (req: Request, res: Response) => {
-  if (process.env.AI_PROVIDER !== 'ollama' && !process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'Configure a IA local ou uma chave OpenAI para habilitar a análise.' });
+  if (!isLocalAiEnabled() && !process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'Configure OPENAI_API_KEY nas variáveis de ambiente para habilitar a análise.' });
   try {
     const { ticker, name, category, userRiskProfile = 'Moderado', intendedAmount = 5000 } = req.body;
     if (typeof ticker !== 'string' || !ticker.trim()) return res.status(400).json({ error: 'Informe o ticker do ativo.' });
@@ -481,7 +484,7 @@ app.post('/api/ai/analyze-risk', async (req: Request, res: Response) => {
 });
 
 app.post('/api/ai/portfolio-diagnostic', async (req: Request, res: Response) => {
-  if (process.env.AI_PROVIDER !== 'ollama' && !process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'Configure a IA local ou uma chave OpenAI para habilitar o diagnóstico.' });
+  if (!isLocalAiEnabled() && !process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'Configure OPENAI_API_KEY nas variáveis de ambiente para habilitar o diagnóstico.' });
   try {
     const { totalPatrimony, allocations, financialSnapshot = {}, profile = 'Moderado' } = req.body;
     if (!Array.isArray(allocations) && (!allocations || typeof allocations !== 'object')) return res.status(400).json({ error: 'Informe as alocações da carteira.' });
@@ -525,7 +528,8 @@ async function startServer() {
   });
 }
 
-startServer().catch((err) => {
-  console.error('Falha ao iniciar servidor:', err);
-});
-
+if (process.env.VERCEL !== '1') {
+  startServer().catch((err) => {
+    console.error('Falha ao iniciar servidor:', err);
+  });
+}

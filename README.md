@@ -34,6 +34,18 @@ Ao entrar com a mesma conta em outro navegador, o sistema carrega os dados do se
 
 O banco SQLite fica em `data/finance.sqlite`. Preserve a pasta `data` para manter usuários, sessões e dados; ela é ignorada pelo Git. As senhas usam scrypt com salt e as sessões usam cookies HttpOnly. Para backup, pare o servidor e copie a pasta `data` inteira. O cadastro é local: não há envio de e-mail de recuperação de senha. Usar em outro dispositivo exige acesso ao mesmo servidor; o login não publica o sistema na internet.
 
+## Publicar na Vercel
+
+O repositório inclui uma função serverless para as rotas da API. Como o sistema de arquivos da Vercel não é persistente, a implantação usa Neon PostgreSQL em vez do SQLite local:
+
+1. Crie um projeto PostgreSQL no [Neon](https://neon.tech/) e copie a string de conexão pooled (`DATABASE_URL`).
+2. Em **Vercel → Project → Settings → Environment Variables**, configure `DATABASE_URL`.
+3. Para diagnósticos e pesquisa com IA, configure `AI_PROVIDER=openai` e `OPENAI_API_KEY`. `OPENAI_MODEL` é opcional e usa `gpt-4.1-mini` por padrão. Ollama só funciona no computador local.
+4. Para Open Finance, configure também `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET` com as credenciais da aplicação Pluggy.
+5. Habilite as variáveis nos ambientes desejados e faça um novo deploy.
+
+As tabelas de usuários e sessões são criadas automaticamente no Neon. Contas e dados armazenados no SQLite local não são copiados para a Vercel; crie uma conta na implantação e adicione/import seus dados nela. Configure as chaves apenas nas variáveis da Vercel, nunca no código ou em arquivos versionados. A senha da conta, cookie e dados do usuário continuam no backend; a chave OpenAI e as credenciais Pluggy não são enviadas ao navegador. Os limites de execução das funções e as cotas dos serviços externos se aplicam.
+
 ## Configurar Open Finance pessoal (Meu Pluggy)
 
 Este aplicativo é para uma única pessoa consultar as próprias contas. Use o conector pessoal MeuPluggy; não conecte os bancos diretamente pelo conector comercial.

@@ -2,8 +2,12 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 const baseUrl = 'http://127.0.0.1:11434';
+export function isLocalAiEnabled() {
+  return process.env.VERCEL !== '1' && process.env.AI_PROVIDER === 'ollama';
+}
+
 export async function ensureLocalAiStarted() {
-  if (process.env.AI_PROVIDER !== 'ollama') return;
+  if (!isLocalAiEnabled()) return;
   try { if ((await fetch(`${baseUrl}/api/version`, { signal: AbortSignal.timeout(2000) })).ok) return; } catch { /* Start the installed local service below. */ }
   if (process.platform !== 'win32' || !process.env.LOCALAPPDATA) return;
   const executable = path.join(process.env.LOCALAPPDATA, 'Programs', 'Ollama', 'ollama.exe');
@@ -42,7 +46,10 @@ export type ResearchSource = { title: string; url: string; excerpt: string };
 function plainXml(value: string) {
   return value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
 }
-export async function researchFinancialTopic(question: string) {
+export async function researchFinancialTopic(
+  question: string,
+  generateAnswer: (prompt: string, schema: object) => Promise<any> = generateLocalAnalysis,
+) {
   const publicQuery = `${question} (site:bcb.gov.br OR site:gov.br OR site:tesourodireto.com.br OR site:fgc.org.br)`;
   const response = await fetch(`https://www.bing.com/search?format=rss&q=${encodeURIComponent(publicQuery)}`, { signal: AbortSignal.timeout(15000), headers: { Accept: 'application/rss+xml, application/xml' } });
   if (!response.ok) throw Object.assign(new Error('A pesquisa na internet está indisponível. Tente novamente.'), { status: 503 });
@@ -79,8 +86,7 @@ export async function researchFinancialTopic(question: string) {
   }
   if (!sources.length) throw Object.assign(new Error('As fontes oficiais estão indisponíveis. Não foi possível confirmar informações na internet.'), { status: 503 });
   const schema = { type: 'object', properties: { answer: { type: 'string' } }, required: ['answer'], additionalProperties: false };
-  const answer = await generateLocalAnalysis(`Pergunta pública: ${question}. Trechos de fontes oficiais selecionadas por assunto e consultadas agora: ${JSON.stringify(sources.map((source, index) => ({ reference: index + 1, title: source.title, excerpt: source.excerpt })))}. Responda em até 150 palavras somente sobre o que os trechos permitem concluir e cite [1], [2] etc. Não apresente o texto resumido como leitura integral da página. Se as fontes não responderem à pergunta, diga isso. Se faltar uma taxa ou data atual, diga que não foi possível confirmar. Não invente URLs.`, schema);
+  const answer = await generateAnswer(`Pergunta pública: ${question}. Trechos de fontes oficiais selecionadas por assunto e consultadas agora: ${JSON.stringify(sources.map((source, index) => ({ reference: index + 1, title: source.title, excerpt: source.excerpt })))}. Responda em até 150 palavras somente sobre o que os trechos permitem concluir e cite [1], [2] etc. Não apresente o texto resumido como leitura integral da página. Se as fontes não responderem à pergunta, diga isso. Se faltar uma taxa ou data atual, diga que não foi possível confirmar. Não invente URLs.`, schema);
   if (typeof answer.answer !== 'string') throw new Error('A IA não retornou uma resposta válida.');
   return { answer: answer.answer, sources, researchedAt: new Date().toISOString() };
 }
-
