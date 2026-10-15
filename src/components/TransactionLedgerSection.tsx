@@ -1,3 +1,4 @@
+import { SectionInfo } from './SectionInfo';
 import React, { useMemo, useState } from 'react';
 import { 
   ArrowRightLeft, 
@@ -232,33 +233,9 @@ Descrição: ${tx.description}
 
   return (
     <div className="bg-slate-900/50 rounded-2xl border border-slate-800 p-4 sm:p-5">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-slate-800">
-        <div className="flex items-center space-x-2.5">
-          <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-            <ArrowRightLeft className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <h3 className="text-base font-extrabold text-white">
-                Extrato bancário
-              </h3>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3" />
-                Dados consultados via Pluggy
-              </span>
-            </div>
-            <p className="text-xs text-slate-400">
-              Lançamentos retornados pelas instituições conectadas
-            </p>
-          </div>
-        </div>
-
-      </div>
-
       <section className="my-4 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/40" aria-labelledby="cashflow-heading">
         <div className="flex flex-col gap-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-cyan-950/30 to-slate-950 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-          <div className="flex items-center gap-3"><div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-2 text-cyan-300"><CalendarDays className="h-4 w-4" /></div><div><h4 id="cashflow-heading" className="text-sm font-bold text-white">Fluxo de caixa</h4><p className="mt-1 text-[11px] text-slate-400">Movimentação bancária do mês · sem somar compras de cartão</p></div></div>
+          <div className="flex items-center gap-3"><div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-2 text-cyan-300"><CalendarDays className="h-4 w-4" /></div><div><h4 id="cashflow-heading" className="text-sm font-bold text-white">Resumo do mês</h4></div></div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <label className="sr-only" htmlFor="cashflow-account">Conta do fluxo de caixa</label>
             <select id="cashflow-account" value={filterBank} onChange={(event) => setFilterBank(event.target.value)} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200"><option value="all">Todas as contas</option>{transactionBanks.map((bank) => <option key={bank} value={bank}>{bank}</option>)}</select>
@@ -270,20 +247,20 @@ Descrição: ${tx.description}
           </div>
         </div>
         {monthlyTotals.size ? <div className="space-y-4 p-4 sm:p-5">
-          <p className="text-[10px] text-slate-500">Entradas e saídas são movimentações de contas bancárias, incluindo transferências; não equivalem a renda e consumo. Os gastos por categoria incluem compras de cartão, mas excluem faturas, aplicações, empréstimos e transferências. PIX sem identificação fica para revisão. Classificações automáticas são sugestões; você pode corrigir em cada lançamento.</p>
+          <SectionInfo title="Como interpretar o extrato">Entradas e saídas são movimentações de contas bancárias, incluindo transferências; não equivalem a renda e consumo. Os gastos por categoria incluem compras de cartão, mas excluem faturas, aplicações, empréstimos e transferências. PIX sem identificação fica para revisão. Classificações automáticas são sugestões; você pode corrigir em cada lançamento.</SectionInfo>
           {Array.from(monthlyTotals, ([currency, totals]) => <div key={currency} className="space-y-3">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{currency}</p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/[0.04] p-3"><span className="text-[10px] text-slate-400">Entradas confirmadas</span><strong className="mt-1 block text-base font-bold text-emerald-300 tabular-nums">{formatCurrency(totals.income, currency)}</strong><span className="text-[10px] text-slate-500">{totals.incomeCount} créditos</span></div>
               <div className="rounded-xl border border-rose-500/15 bg-rose-500/[0.04] p-3"><span className="text-[10px] text-slate-400">Saídas confirmadas</span><strong className="mt-1 block text-base font-bold text-rose-300 tabular-nums">{formatCurrency(totals.expense, currency)}</strong><span className="text-[10px] text-slate-500">{totals.expenseCount} débitos</span></div>
               <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/[0.04] p-3"><span className="text-[10px] text-slate-400">Diferença do período</span><strong className={`mt-1 block text-base font-bold tabular-nums ${totals.income - totals.expense < 0 ? 'text-rose-300' : 'text-cyan-200'}`}>{formatCurrency(totals.income - totals.expense, currency)}</strong><span className="text-[10px] text-slate-500">Entradas menos saídas</span></div>
-              <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.04] p-3"><span className="text-[10px] text-slate-400">Saídas pendentes</span><strong className="mt-1 block text-base font-bold text-amber-200 tabular-nums">{formatCurrency(totals.pendingExpense, currency)}</strong><span className="text-[10px] text-slate-500">{totals.pendingCount} lançamentos</span></div>
+              {totals.pendingCount > 0 && <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.04] p-3"><span className="text-[10px] text-slate-400">Saídas pendentes</span><strong className="mt-1 block text-base font-bold text-amber-200 tabular-nums">{formatCurrency(totals.pendingExpense, currency)}</strong><span className="text-[10px] text-slate-500">{totals.pendingCount} lançamentos</span></div>}
             </div>
           </div>)}
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <details className="text-xs text-slate-400"><summary className="cursor-pointer">Categorias e pendências</summary><div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
             <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4"><h5 className="mb-3 text-xs font-semibold text-white">Despesas por categoria</h5>{categoryTotals.length ? <div className="space-y-3">{categoryTotals.map((row) => { const max = Math.max(...categoryTotals.filter((item) => item.currency === row.currency).map((item) => item.total), 1); return <div key={`${row.category}-${row.currency}`}><div className="mb-1 flex items-center justify-between gap-3 text-[10px]"><span className="truncate text-slate-300">{row.category} · {row.currency}</span><span className="shrink-0 font-semibold text-slate-200 tabular-nums">{formatCurrency(row.total, row.currency)}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-rose-400" style={{ width: `${Math.max(3, row.total / max * 100)}%` }} /></div></div>})}</div> : <p className="text-[11px] text-slate-500">Sem despesas confirmadas neste mês.</p>}</div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4"><h5 className="mb-3 text-xs font-semibold text-white">Despesas futuras</h5>{pendingCategoryTotals.length ? <div className="space-y-3">{pendingCategoryTotals.map((row) => { const max = Math.max(...pendingCategoryTotals.filter((item) => item.currency === row.currency).map((item) => item.total), 1); return <div key={`${row.category}-${row.currency}`}><div className="mb-1 flex items-center justify-between gap-3 text-[10px]"><span className="truncate text-slate-300">{row.category} · {row.currency}</span><span className="shrink-0 font-semibold text-slate-200 tabular-nums">{formatCurrency(row.total, row.currency)}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-amber-300" style={{ width: `${Math.max(3, row.total / max * 100)}%` }} /></div></div>})}</div> : <p className="text-[11px] text-slate-500">Sem despesas pendentes neste mês.</p>}</div>
-          </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4"><h5 className="mb-3 text-xs font-semibold text-white">Despesas pendentes</h5>{pendingCategoryTotals.length ? <div className="space-y-3">{pendingCategoryTotals.map((row) => { const max = Math.max(...pendingCategoryTotals.filter((item) => item.currency === row.currency).map((item) => item.total), 1); return <div key={`${row.category}-${row.currency}`}><div className="mb-1 flex items-center justify-between gap-3 text-[10px]"><span className="truncate text-slate-300">{row.category} · {row.currency}</span><span className="shrink-0 font-semibold text-slate-200 tabular-nums">{formatCurrency(row.total, row.currency)}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-amber-300" style={{ width: `${Math.max(3, row.total / max * 100)}%` }} /></div></div>})}</div> : <p className="text-[11px] text-slate-500">Sem despesas pendentes neste mês.</p>}</div>
+          </div></details>
         </div> : <p className="p-5 text-xs text-slate-500">Nenhuma movimentação para {cashMonthLabel} nesta conta.</p>}
       </section>
 
@@ -389,7 +366,7 @@ Descrição: ${tx.description}
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-3"><label className="text-xs text-slate-400">Tipo de movimentação <select value={filterNature} onChange={(event) => { setFilterNature(event.target.value); setVisibleCount(20); }} className="ml-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs"><option value="all">Todos os tipos</option>{Object.entries(natureLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><span className="text-[11px] text-slate-500">Abra um lançamento para corrigir sua classificação.</span></div>
+      <details className="mt-3 text-xs text-slate-400"><summary className="cursor-pointer">Mais filtros{filterNature !== 'all' ? ` · ${natureLabels[filterNature as MovementNature]}` : ''}</summary><div className="mt-3 flex flex-wrap items-center gap-3"><label className="text-xs text-slate-400">Tipo de movimentação <select value={filterNature} onChange={(event) => { setFilterNature(event.target.value); setVisibleCount(20); }} className="ml-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs"><option value="all">Todos os tipos</option>{Object.entries(natureLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><span className="text-[11px] text-slate-500">Abra um lançamento para corrigir sua classificação.</span></div></details>
       {/* Transactions List */}
       <div className="divide-y divide-slate-800/60 mt-1">
         {groupedMovements.map(([day, dayTransactions]) => <React.Fragment key={day}>
@@ -403,9 +380,9 @@ Descrição: ${tx.description}
           return (
             <div
               key={tx.id}
-              className="my-2 flex flex-col gap-3 rounded-2xl border border-slate-800/80 bg-slate-950/45 p-3 transition-all hover:border-slate-700 hover:bg-slate-900/70 sm:flex-row sm:items-center sm:justify-between sm:p-4"
+              className="my-2 flex flex-row items-center justify-between gap-3 rounded-xl border border-slate-800/80 bg-slate-950/45 p-3 transition-all hover:border-slate-700 hover:bg-slate-900/70 sm:flex-row sm:items-center sm:justify-between sm:p-4"
             >
-              <div className="flex min-w-0 items-start gap-3">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
                 <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${tx.direction === 'debit' ? 'border-rose-500/20 bg-rose-500/10 text-rose-300' : tx.direction === 'credit' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-cyan-500/20 bg-cyan-500/10 text-cyan-300'}`}>
                   <Icon className="h-4 w-4" />
                 </div>
@@ -420,15 +397,12 @@ Descrição: ${tx.description}
                   <p className="mt-1 truncate text-[10px] text-slate-400">
                     <span className="text-slate-500">Banco</span> <strong className="inline-flex items-center gap-1.5 font-medium text-slate-300"><BankLogo name={tx.sourceAccountName} className="h-5 w-5"/>{tx.sourceAccountName}</strong><span className="ml-1">· {tx.sourceAccountType === 'CREDIT' ? 'Cartão' : 'Conta'}</span>
                   </p>
-                  <div className="mt-1 flex min-w-0 items-center gap-2 text-[10px] text-slate-500">
-                    <Clock className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{formatMovementDate(tx.timestamp)}</span>
-                  </div>
+
                 </div>
               </div>
 
               {/* Amount and Action */}
-              <div className="flex items-center justify-between gap-3 border-t border-slate-800/70 pt-2 sm:justify-end sm:border-0 sm:pt-0">
+              <div className="flex shrink-0 items-center justify-end gap-2">
                 <div className="text-left sm:text-right">
                   <span className={`block font-mono text-sm font-bold tabular-nums sm:text-base ${tx.direction === 'debit' ? 'text-rose-300' : tx.direction === 'credit' ? 'text-emerald-300' : 'text-white'}`}>
                     {tx.direction === 'debit' ? '−' : tx.direction === 'credit' ? '+' : ''}{formatCurrency(tx.amount, tx.currencyCode || 'BRL')}
@@ -444,7 +418,7 @@ Descrição: ${tx.description}
                   title="Ver detalhes do lançamento"
                 >
                   <FileText className="w-3.5 h-3.5" />
-                  <span>Detalhes</span>
+                  <span className="sr-only sm:not-sr-only">Detalhes</span>
                 </button>
               </div>
             </div>

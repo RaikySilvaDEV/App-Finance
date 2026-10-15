@@ -35,7 +35,8 @@ import { PlanningSection, ManualLoansPanel } from './components/PlanningSection'
 import { emptyPlanning, classifyTransactions } from './lib/planning';
 import type { PlanningData } from './lib/planning';
 import { AlertSummary, MoneyAvailable, SyncStatus } from './components/DailyControl';
-import { BankBills } from './components/BankBills';
+import { AccountsSection } from './components/AccountsSection';
+import { SectionInfo } from './components/SectionInfo';
 import { useControlData } from './lib/useControlData';
 import { finiteValue } from './lib/productMapping';
 import { providerTransaction } from './lib/providerTransaction';
@@ -68,6 +69,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
   // Global States
   const [isPrivateMode, setIsPrivateMode] = useState<boolean>(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [accountsView, setAccountsView] = useState<'accounts' | 'cards' | 'bills'>('accounts');
   const [activeTab, setActiveTab] = useState<MainTab>('overview');
   const [menuTransitioning, setMenuTransitioning] = useState(false);
   const menuTransitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -433,10 +435,10 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         />
       {/* Main Content Area */}
       <main id="overview" aria-busy={showDataSkeleton} className="min-w-0 flex-1 w-full px-4 pt-5 pb-24 sm:px-6 lg:px-7 lg:py-8 space-y-6">
-        <div><h1 className="text-2xl font-semibold tracking-tight text-white">{{ overview: 'Visão geral', accounts: 'Contas e cartões', assets: 'Ativos', ledger: 'Fluxo de caixa', market: 'Mercado', portfolio: 'Posições manuais', loans: 'Empréstimos', connections: 'Conexões', planning: 'Planejamento' }[activeTab]}</h1><p className="mt-2 text-sm text-slate-500">{{ overview: 'Uma visão das suas finanças conectadas.', accounts: 'Saldos bancários, cartões e limites.', assets: 'Seus investimentos conectados, organizados por classe ou instituição.', ledger: 'Acompanhe entradas, despesas e movimentações.', market: 'Indicadores e oportunidades de investimento.', portfolio: 'Acompanhe os ativos que você cadastrou.', loans: 'Empréstimos conectados e valores cadastrados por você.', connections: 'Suas instituições, atualizações e autorizações.', planning: 'Orçamento, compromissos, metas e histórico, salvos na sua conta.' }[activeTab]}</p></div>
+        <div><h1 className="text-2xl font-semibold tracking-tight text-white">{{ overview: 'Visão geral', accounts: 'Contas e cartões', assets: 'Ativos', ledger: 'Fluxo de caixa', market: 'Mercado', portfolio: 'Posições manuais', loans: 'Empréstimos', connections: 'Conexões', planning: 'Planejamento' }[activeTab]}</h1><SectionInfo title="Sobre esta seção">{{ overview: 'Uma visão das suas finanças conectadas.', accounts: 'Saldos bancários, cartões e limites.', assets: 'Seus investimentos conectados, organizados por classe ou instituição.', ledger: 'Acompanhe entradas, despesas e movimentações.', market: 'Indicadores e oportunidades de investimento.', portfolio: 'Acompanhe os ativos que você cadastrou.', loans: 'Empréstimos conectados e valores cadastrados por você.', connections: 'Suas instituições, atualizações e autorizações.', planning: 'Orçamento, compromissos, metas e histórico, salvos na sua conta.' }[activeTab]}</SectionInfo></div>
         {(savingData || saveError) && <p role="status" className="text-xs text-slate-500">{savingData ? 'Salvando seus dados…' : 'Dados ainda não salvos'}</p>}
         {saveError && <div role="alert" className="rounded-lg border border-rose-500/30 p-3 text-sm text-rose-300">{saveError}<button onClick={() => { setSavingData(true); saveUserData().then(() => setSaveError(null)).catch((error) => setSaveError(error.message)).finally(() => setSavingData(false)); }} className="ml-3 underline">Tentar salvar novamente</button></div>}
-        {providerSyncError && activeTab !== 'accounts' && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{providerSyncError}</p>}
+        {providerSyncError && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{providerSyncError}</p>}
         {history.error && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{history.error} Os dados consultados continuam visíveis, mas esta atualização pode não ter sido salva no histórico.</p>}
         {bankDataLoading && hasLoadedBankData && !showDataSkeleton && <p role="status" className="flex items-center gap-2 text-xs text-slate-400"><RefreshCw aria-hidden="true" className="h-3.5 w-3.5 animate-spin"/>Atualizando dados… Os últimos valores permanecem visíveis.</p>}
         {showDataSkeleton ? <DataSkeleton label={menuTransitioning ? 'Abrindo seção…' : 'Carregando seus dados financeiros…'} variant={activeTab === 'overview' ? 'overview' : activeTab === 'connections' ? 'connections' : activeTab === 'ledger' || activeTab === 'planning' ? 'ledger' : 'list'}/> : <div key={activeTab} className="menu-content space-y-6">
@@ -444,7 +446,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         {activeTab === 'overview' && <>
         <AlertSummary data={planning} transactions={classifiedTransactions} controls={controlView} privateMode={isPrivateMode} onOpen={() => navigateToTab('planning')}/>
         <MoneyAvailable accounts={bankAccounts} cards={creditCards} investments={providerInvestments} loans={loans} data={planning} privateMode={isPrivateMode}/>
-        <FinancialOverview accounts={bankAccounts} cards={creditCards} investments={providerInvestments} privateMode={isPrivateMode} onOpenAccounts={() => navigateToTab('accounts')} onOpenAssets={() => navigateToTab('assets')} onConnect={() => setIsOpenFinanceConsentOpen(true)}/>
+        <FinancialOverview accounts={bankAccounts} cards={creditCards} investments={providerInvestments} privateMode={isPrivateMode} onOpenAccounts={() => { setAccountsView('accounts'); navigateToTab('accounts'); }} onOpenCards={() => { setAccountsView('cards'); navigateToTab('accounts'); }} onOpenAssets={() => navigateToTab('assets')} onConnect={() => setIsOpenFinanceConsentOpen(true)}/>
         <BalanceEvolution accounts={bankAccounts} transactions={history.allTransactions} isPrivateMode={isPrivateMode} snapshots={history.snapshots}/>
         {/* 1. Core Performance & Gains Dashboard (Diário, Semanal, Mensal, YTD) */}
         <details className="market-preview rounded-2xl border border-slate-800 bg-slate-900/40">
@@ -458,21 +460,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
         </>}
 
-        {activeTab === 'accounts' && (<>
-        <ConnectedAssets section="cards" investments={[]} creditCards={creditCards} isPrivateMode={isPrivateMode} />
-        <BankBills itemIds={pluggyItemIds} privateMode={isPrivateMode}/>
-
-        {/* 2. Mapeamento Estratégico dos Seus Bancos (Inter, Itaú, Nubank, Mercado Pago, PagBank, Santander, PicPay) */}
-        <section className="space-y-3">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 text-sm text-slate-400">
-            {providerSyncError && <p role="alert" className="mb-3 rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-200">Falha ao sincronizar Pluggy: {providerSyncError}</p>}
-            {bankAccounts.length ? 'Saldos carregados diretamente das instituições conectadas pela Pluggy.' : 'Conecte uma instituição pela Pluggy para consultar saldos bancários reais.'}
-            {bankAccounts.map((account) => <div key={account.id} className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3 text-white"><div className="flex items-center gap-3"><BankLogo name={account.bankName}/><div><p>{account.bankName} · {account.accountType} · {isPrivateMode ? 'R$ ••••••' : `R$ ${account.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}</p><p className="mt-1 text-xs text-slate-500">{account.accountNumber} · Atualização informada: {new Date(account.lastSync).toLocaleString('pt-BR')}</p></div></div><button onClick={() => void handleAccountUnlinked(account.id)} className="text-xs text-rose-300 hover:text-rose-200">Remover do painel</button></div>)}
-            <a href="https://meu.pluggy.ai/connections" target="_blank" rel="noreferrer" className="mt-4 inline-block text-xs text-cyan-300">Gerenciar autorizações bancárias no Meu Pluggy ↗</a>
-          </div>
-        </section>
-
-        </>)}
+        {activeTab === 'accounts' && <AccountsSection initialTab={accountsView} accounts={bankAccounts} cards={creditCards} itemIds={pluggyItemIds} privateMode={isPrivateMode} onRemove={handleAccountUnlinked}/>}
 
         {activeTab === 'assets' && <ConnectedAssets section="investments" accounts={bankAccounts} investments={visibleProviderInvestments} creditCards={[]} isPrivateMode={isPrivateMode} />}
 
@@ -531,9 +519,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
             <span>•</span>
             <span>Open Finance via Pluggy • somente leitura</span>
           </div>
-          <p className="text-[11px] text-slate-500">
-            Pagamentos não habilitados. Cotações de mercado consultadas sob demanda.
-          </p>
+          
         </div>
       </footer>
 

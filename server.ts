@@ -176,14 +176,15 @@ app.get('/api/open-finance/connections', async (req, res) => {
 app.get('/api/open-finance/bills', async (req, res) => {
   const ids = (Array.isArray(req.query.itemId) ? req.query.itemId : req.query.itemId ? [req.query.itemId] : []).map(String).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
   try {
-    const { creditCards, unavailableItems } = await readAccounts(ids);
+    const { accounts, creditCards, unavailableItems } = await readAccounts(ids);
     const bills: any[] = []; let unavailable = unavailableItems?.length || 0;
     await Promise.all(creditCards.map(async (card) => {
       try {
         let page = 1, total = 1;
         do {
           const result = await pluggyRequest(`/bills?accountId=${encodeURIComponent(card.id)}&page=${page}&pageSize=100`);
-          bills.push(...(result.results || []).map((bill: any) => ({ ...bill, bank: card.name, accountId: card.id, providerItemId: card.providerItemId })));
+          const bank = accounts.find((account) => account.providerItemId === card.providerItemId)?.bankName || (card.institution !== 'MeuPluggy' ? card.institution : '') || 'Banco não identificado';
+          bills.push(...(result.results || []).map((bill: any) => ({ ...bill, bank, cardName: card.name, cardLastFour: card.number, accountId: card.id, providerItemId: card.providerItemId })));
           total = Number(result.totalPages) || 1; page++;
         } while (page <= total && page <= 100);
         if (page <= total) unavailable++;

@@ -1,3 +1,4 @@
+import { SectionInfo } from './SectionInfo';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, CalendarDays, RefreshCw } from 'lucide-react';
 import { Asset, PortfolioHolding } from '../types/finance';
@@ -58,14 +59,14 @@ export const GainsPerformanceCard: React.FC<Props> = ({ holdings, isPrivateMode,
   const formatDate = (timestamp: number) => new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(timestamp));
   return <section className="overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-900/90 to-[#101012] p-4 shadow-2xl sm:p-6">
     <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-800/80 pb-5">
-      <div><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400"><Activity className="h-4 w-4 text-emerald-400"/>Visão geral</div>
+      <div><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400"><Activity className="h-4 w-4 text-emerald-400"/>Posições manuais · estimativa</div>
         <div className="mt-2 flex flex-wrap items-baseline gap-3"><h2 className="text-3xl font-extrabold text-white">{isPrivateMode ? 'R$ ••••••' : currency(totalValue)}</h2><span className={`text-sm font-semibold ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{isPrivateMode ? '••••' : `${pnl >= 0 ? '+' : ''}${currency(pnl)} (${pnlPct.toFixed(2)}%)`}</span></div>
-        <p className="mt-1 text-xs text-slate-400">Posições manuais: valor estimado pelo último preço disponível e preço médio cadastrado.</p>
+        <SectionInfo title="Sobre os valores">Posições manuais: valor estimado pelo último preço disponível e preço médio cadastrado.</SectionInfo>
       </div>
       <div className="flex items-center gap-2"><select aria-label="Ativo do gráfico" value={ticker} onChange={event => setTicker(event.target.value)} className="max-w-[180px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">{assets.map(asset => <option key={asset.ticker} value={asset.ticker}>{asset.ticker}</option>)}</select>
         <button onClick={() => setRefreshKey(value => value + 1)} disabled={loading || !ticker} className="rounded-lg border border-slate-700 p-2 text-slate-300 hover:bg-slate-800 disabled:opacity-50" title="Atualizar histórico" aria-label="Atualizar histórico"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}/></button></div>
     </div>
-    <div className="pt-5"><div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-white">Histórico de cotação · {ticker || '—'}</h3><p className="mt-1 text-[11px] text-slate-500">Fechamentos diários de mercado, via Yahoo Finance. Não representa o patrimônio histórico da carteira.</p></div>
+    <div className="pt-5"><div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-white">Histórico de cotação · {ticker || '—'}</h3><SectionInfo title="Sobre o gráfico">Fechamentos diários de mercado, via Yahoo Finance. Não representa o patrimônio histórico da carteira.</SectionInfo></div>
       <div className="flex rounded-lg border border-slate-800 bg-slate-950 p-1">{(['week','month'] as const).map(value => <button key={value} onClick={() => setPeriod(value)} className={`rounded-md px-3 py-1.5 text-xs ${period === value ? 'bg-cyan-400 font-bold text-slate-950' : 'text-slate-400'}`}>{value === 'week' ? <><CalendarDays className="mr-1 inline h-3 w-3"/>1 semana</> : '1 mês'}</button>)}</div></div>
       <div className="relative h-[240px] rounded-xl border border-slate-800/70 bg-slate-950/60 p-2 sm:h-[300px]">
         {loading && <div className="absolute inset-0 z-10 grid place-items-center rounded-xl bg-slate-950/70 text-xs text-slate-400">Carregando histórico…</div>}
