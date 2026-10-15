@@ -11,6 +11,8 @@ const panel = 'rounded-xl border border-slate-800 bg-slate-900/40 p-4 sm:p-5';
 export type ControlData = { connections: any[]; sync: { active?: boolean; warning?: string; activatedAt?: string; cache?: any[]; alerts?: any[] }; error: string };
 export function SyncStatus({ data, reload }: { data: ControlData; reload: () => void }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  // Wait for the initial status and keep successful activation out of the layout.
+  if (data.sync.active !== false && !error && !data.error && !data.sync.warning) return null;
   async function activate() {
     setBusy(true); setError('');
     try { const response = await fetch('/api/user/sync/activate', { method: 'POST' }); const body = await response.json(); if (!response.ok) throw new Error(body.error); reload(); }
