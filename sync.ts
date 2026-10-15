@@ -8,6 +8,7 @@ import { brazilDay } from './src/lib/planning.js';
 
 const publicUrl = 'https://app-finance-ruby-one.vercel.app/api/integrations/pluggy';
 const supported = new Set(['item/created', 'item/updated', 'item/error', 'item/deleted', 'item/waiting_user_input', 'item/waiting_user_action', 'transactions/created', 'transactions/updated', 'transactions/deleted']);
+let webhookHealth: { id: string; checkedAt: number; active: boolean } | null = null;
 async function config() { return JSON.parse((await records('__system__', 'integration')).find((row) => row.record_id === 'pluggy')?.payload || '{}'); }
 export async function activatePluggySync() {
   const current = await config();
@@ -19,6 +20,7 @@ export async function activatePluggySync() {
   const body = JSON.stringify({ url: publicUrl, event: 'all', headers: { 'X-Finpulse-Webhook': token } });
   const webhook = await pluggyRequest(existing ? `/webhooks/${existing.id}` : '/webhooks', { method: existing ? 'PATCH' : 'POST', body });
   await putRecords('__system__', [record('pluggy', 'integration', { token, id: webhook.id || existing?.id, activatedAt: new Date().toISOString() })]);
+  webhookHealth = null;
   return { active: true };
 }
 export async function syncItem(userId: string, itemId: string) {
@@ -27,13 +29,12 @@ export async function syncItem(userId: string, itemId: string) {
     readAccounts([itemId]), readTransactions([itemId]), readInvestments([itemId]), readLoans([itemId]), pluggyRequest(`/items/${itemId}`),
   ]);
   if (accounts.unavailableItems?.length || !movements.complete || !investments.complete) throw new Error('Sincronização parcial; os dados anteriores foram preservados.');
-  const old = (await records(userId, 'bank_cache')).map((row) => JSON.parse(row.payload));
   const cache = { itemId, accounts: accounts.accounts, creditCards: accounts.creditCards || [], investments: investments.investments, loans: loans.loans, lastUpdatedAt: item.lastUpdatedAt || item.updatedAt, status: item.status, capturedAt: new Date().toISOString() };
   const transactions = movements.transactions.map((tx: any) => providerTransaction(tx, accounts.accounts));
   await putRecords(userId, [record(`cache:${itemId}`, 'bank_cache', cache, started), ...transactions.map((tx: any) => record(`tx:${tx.id}`, 'transaction', tx, started))]);
   const currentOwners = await owners(itemId);
   const owned = JSON.parse(currentOwners.find((row) => row.id === userId)?.state || '{}').itemIds || [];
-  const caches = [...old.filter((row) => row.itemId !== itemId && owned.includes(row.itemId)), cache];
+  const caches = (await records(userId, 'bank_cache')).map((row) => JSON.parse(row.payload)).filter((row) => owned.includes(row.itemId));
   if (owned.length && owned.every((id: string) => caches.some((row) => row.itemId === id))) {
     // Daily snapshots preserve the actual observation dates, including each bank's freshness.
     await putRecords(userId, [record(`snapshot:${brazilDay()}`, 'snapshot', { date: brazilDay(), accounts: caches.flatMap((row) => row.accounts), creditCards: caches.flatMap((row) => row.creditCards), investments: caches.flatMap((row) => row.investments), loans: caches.flatMap((row) => row.loans) })]);
@@ -86,7 +87,18 @@ export function installSyncUser(app: Express) {
     try {
       const userId = res.locals.user.id, owned = JSON.parse(res.locals.user.state || '{}').itemIds || [];
       const [settings, cache, alerts] = await Promise.all([config(), records(userId, 'bank_cache'), records(userId, 'connection_alert')]);
-      res.json({ active: Boolean(settings.id), activatedAt: settings.activatedAt, cache: cache.map((row) => JSON.parse(row.payload)).filter((row) => owned.includes(row.itemId)), alerts: alerts.map((row) => JSON.parse(row.payload)).filter((row) => owned.includes(row.itemId)) });
+      let active = false, warning = '';
+      if (settings.id) {
+        try {
+          if (!webhookHealth || webhookHealth.id !== settings.id || Date.now() - webhookHealth.checkedAt > 300000) {
+            const remote = await pluggyRequest(`/webhooks/${settings.id}`);
+            webhookHealth = { id: settings.id, checkedAt: Date.now(), active: !remote.disabledAt };
+          }
+          active = webhookHealth.active;
+          if (!active) warning = 'As notificações foram desativadas pelo provedor. Confira a implantação e reative a conexão automática.';
+        } catch { warning = 'Não foi possível confirmar se as notificações estão ativas na Pluggy.'; }
+      }
+      res.json({ active, warning, activatedAt: settings.activatedAt, cache: cache.map((row) => JSON.parse(row.payload)).filter((row) => owned.includes(row.itemId)), alerts: alerts.map((row) => JSON.parse(row.payload)).filter((row) => owned.includes(row.itemId)) });
     } catch { res.status(503).json({ error: 'Não foi possível consultar a sincronização.' }); }
   });
   app.post('/api/user/sync/activate', async (_req, res) => {
