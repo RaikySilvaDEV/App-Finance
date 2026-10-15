@@ -19,7 +19,7 @@ export function FinancialOverview({ accounts, cards, investments, privateMode, o
     return sum + (data?.creditLimit != null && data?.availableCreditLimit != null ? Math.max(0, Number(data.creditLimit) - Number(data.availableCreditLimit)) : 0);
   }, 0);
   const percent = limit > 0 ? Math.min(100, used / limit * 100) : null;
-  const visibleCards = cards.filter((card) => Math.round((Number(card.balance) || 0) * 100) !== 0);
+  const visibleCards = cards;
   const activeInvestments = investments.filter((asset) => Math.round((Number(asset.balance) || 0) * 100) !== 0);
   const invested = activeInvestments.filter((asset) => (asset.currencyCode || 'BRL') === 'BRL').reduce((sum, asset) => sum + (Number(asset.balance) || 0), 0);
   const groups = new Map<string, { label: string; value: number; currency: string; count: number }>();
