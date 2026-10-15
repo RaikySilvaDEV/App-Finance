@@ -25,6 +25,7 @@ import {
 import { Header } from './components/Header';
 import { DataSkeleton } from './components/DataSkeleton';
 import { BankLogo } from './components/BankLogo';
+import { EmailAccessFlow } from './components/EmailAccess';
 import { AuthGate, SavedState } from './components/AuthGate';
 import { ConnectedAssets } from './components/ConnectedAssets';
 import { LoansSection } from './components/LoansSection';
@@ -41,6 +42,7 @@ import { useControlData } from './lib/useControlData';
 import { finiteValue } from './lib/productMapping';
 import { providerTransaction } from './lib/providerTransaction';
 import { useFinancialHistory } from './lib/useFinancialHistory';
+import { MarketDividends } from './components/MarketDividends';
 import { MainTab, Sidebar } from './components/Sidebar';
 import { GainsPerformanceCard } from './components/GainsPerformanceCard';
 import { BestOpportunitiesSection } from './components/BestOpportunitiesSection';
@@ -292,7 +294,9 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         setAssets(Object.entries(quotes).map(([ticker, live]: [string, any]) => ({
           id: ticker,
           ticker,
-          name: ticker,
+          name: live.name || ticker,
+          source: live.source,
+          quoteDate: live.lastUpdated,
           category: ticker.endsWith('11') ? 'fiis' : 'acoes',
           currentPrice: live.currentPrice,
           variationDailyPct: live.dailyChangePct,
@@ -324,9 +328,9 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
               const totalReturnBrl = Number((currentValue - totalInvested).toFixed(2));
               const totalReturnPct = totalInvested > 0 ? Number(((totalReturnBrl / totalInvested) * 100).toFixed(2)) : 0;
               
-              const dailyReturnBrl = Number((currentValue * (live.dailyChangePct / 100)).toFixed(2));
-              const weeklyReturnBrl = Number((currentValue * (live.weeklyChangePct / 100)).toFixed(2));
-              const monthlyReturnBrl = Number((currentValue * (live.monthlyChangePct / 100)).toFixed(2));
+              const dailyReturnBrl = live.dailyChangePct == null ? null : Number((currentValue * (live.dailyChangePct / 100)).toFixed(2));
+              const weeklyReturnBrl = live.weeklyChangePct == null ? null : Number((currentValue * (live.weeklyChangePct / 100)).toFixed(2));
+              const monthlyReturnBrl = live.monthlyChangePct == null ? null : Number((currentValue * (live.monthlyChangePct / 100)).toFixed(2));
 
               return {
                 ...h,
@@ -516,6 +520,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         </>)}
 
         {activeTab === 'market' && (<>
+        <MarketDividends privateMode={isPrivateMode}/>
         {/* 4. "Onde Investir Agora" - Curated Best Real Opportunities with Custom Risk Analysis */}
         <section >
           <BestOpportunitiesSection
@@ -602,7 +607,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
 
 export default function App() {
-  return <AuthGate>{(state, user, logout) => <FinanceApp initialState={state} email={user.email} onLogout={logout}/>}</AuthGate>;
+  return <EmailAccessFlow><AuthGate>{(state, user, logout) => <FinanceApp initialState={state} email={user.email} onLogout={logout}/>}</AuthGate></EmailAccessFlow>;
 }
 
 

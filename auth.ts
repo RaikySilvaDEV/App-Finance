@@ -8,6 +8,7 @@ import { neon } from '@neondatabase/serverless';
 import type { Express, Request, Response } from 'express';
 import { validatePlanning } from './src/lib/planning.js';
 import { installHistory } from './history.js';
+import { createEmailIntegration } from './email.js';
 import { installGoogleAuth } from './google-auth.js';
 import { ownedConnections, appendUserConnection } from './connection-ownership.js';
 
@@ -153,6 +154,8 @@ export function installAuth(app: Express, validateItem: (id: string, user: Sessi
     }
     next();
   });
+  const emailIntegration = createEmailIntegration({ ensure: ensureDatabase, sql, local: localDatabase, findUser });
+  emailIntegration.public(app);
   installGoogleAuth(app, { ensure: ensureDatabase, sql, local: localDatabase, userFor, findUser, createUser, createSession });
   app.post('/api/auth/:action', async (req, res) => {
     const action = req.params.action;
@@ -209,6 +212,7 @@ export function installAuth(app: Express, validateItem: (id: string, user: Sessi
       res.status(process.env.VERCEL === '1' && !databaseUrl ? 503 : 500).json({ error: databaseError() });
     }
   });
+  emailIntegration.private(app);
   app.get('/api/user/state', (_req, res) => res.json(readState(res.locals.user)));
   app.put('/api/user/state', async (req, res) => {
     try {

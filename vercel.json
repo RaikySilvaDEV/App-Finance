@@ -16,5 +16,11 @@
       "source": "/api/:path*",
       "destination": "/api/index?route=:path*"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/notifications/daily",
+      "schedule": "0 12 * * *"
+    }
   ]
 }

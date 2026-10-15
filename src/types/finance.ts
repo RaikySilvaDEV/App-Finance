@@ -89,6 +89,8 @@ export interface FinancialTransaction {
 }
 
 export interface Asset {
+  source?: string;
+  quoteDate?: string;
   id: string;
   ticker: string;
   name: string;
@@ -128,11 +130,11 @@ export interface PortfolioHolding {
   currentValue: number;
   totalReturnBrl: number;
   totalReturnPct: number;
-  dailyReturnBrl: number;
+  dailyReturnBrl: number | null;
   dailyReturnPct: number;
-  weeklyReturnBrl: number;
+  weeklyReturnBrl: number | null;
   weeklyReturnPct: number;
-  monthlyReturnBrl: number;
+  monthlyReturnBrl: number | null;
   monthlyReturnPct: number;
   nextDividendBrl?: number;
   nextDividendDate?: string;

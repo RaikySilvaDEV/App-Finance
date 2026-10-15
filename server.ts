@@ -8,6 +8,7 @@ import { readAccounts, readTransactions, readInvestments, readLoans } from './pr
 import { installSync, installSyncUser } from './sync.js';
 import { putRecords, record, records } from './sync-store.js';
 import { classifyBills } from './src/lib/billStatus.js';
+import { brapiQuote, brapiHistory, installBrapi } from './brapi.js';
 import { authorizeConnection, installBankOnboarding } from './bank-onboarding.js';
 import { businessConnectionsEnabled, personalOwner } from './connection-ownership.js';
 import { providerTransaction } from './src/lib/providerTransaction.js';
@@ -35,6 +36,7 @@ app.use(express.json({ limit: '2mb' }));
 installSync(app);
 installAuth(app, authorizeConnection, async (id) => (await pluggyRequest(`/investments/${id}`)).itemId);
 installBankOnboarding(app);
+installBrapi(app);
 installSyncUser(app);
 
 // Initialize server-side Gemini
@@ -68,7 +70,7 @@ async function fetchBacenSerie(serieCode: number): Promise<{ data: string; valor
 }
 
 // Helper: Fetch Real Quote from Yahoo Finance (B3)
-async function fetchYahooQuote(symbol: string) {
+async function fetchFallbackQuote(symbol: string) {
   const cached = cache.quotes.get(symbol);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return cached.data;
@@ -82,6 +84,7 @@ async function fetchYahooQuote(symbol: string) {
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(querySymbol)}?interval=1d&range=1mo`;
     const res = await fetch(url, {
+      signal: AbortSignal.timeout(10000),
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
@@ -115,6 +118,7 @@ async function fetchYahooQuote(symbol: string) {
       monthlyChangePct: parseFloat(monthlyChangePct.toFixed(2)),
       currency: meta.currency || 'BRL',
       isLive: true,
+      source: 'Yahoo Finance',
       lastUpdated: meta.regularMarketTime ? new Date(meta.regularMarketTime * 1000).toISOString() : null,
     };
 
@@ -124,6 +128,15 @@ async function fetchYahooQuote(symbol: string) {
     console.warn(`[Yahoo Finance] Falha ao cotar ${symbol}:`, err.message);
     return null;
   }
+}
+
+async function fetchMarketQuote(symbol: string) {
+  const normalized = symbol.trim().toUpperCase();
+  const cached = cache.quotes.get(normalized);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) return cached.data;
+  const quote = await brapiQuote(normalized);
+  if (quote) { cache.quotes.set(normalized, { data: quote, timestamp: Date.now() }); return quote; }
+  return fetchFallbackQuote(normalized);
 }
 
 // -------------------------------------------------------------
@@ -288,7 +301,7 @@ app.get('/api/market/real-indicators', async (_req: Request, res: Response) => {
 });
 app.get('/api/market/quote/:ticker', async (req: Request, res: Response) => {
   const ticker = req.params.ticker.toUpperCase().trim();
-  const quote = await fetchYahooQuote(ticker);
+  const quote = await fetchMarketQuote(ticker);
   if (!quote) {
     return res.status(404).json({ error: `Ativo ${ticker} não encontrado na B3.` });
   }
@@ -302,8 +315,10 @@ app.get('/api/market/history/:ticker', async (req: Request, res: Response) => {
     ? `${ticker}.SA`
     : ticker;
   try {
+    const brapi = await brapiHistory(ticker);
+    if (brapi) return res.json(brapi);
     const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(querySymbol)}?interval=1d&range=1mo`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 FinPulse/1.0', 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'Mozilla/5.0 FinPulse/1.0', 'Accept': 'application/json' },
     });
     if (!response.ok) return res.status(502).json({ error: 'Fonte de cotações indisponível.' });
     const json: any = await response.json();
@@ -324,7 +339,7 @@ app.get('/api/market/history/:ticker', async (req: Request, res: Response) => {
 app.get('/api/market/quotes-batch', async (req: Request, res: Response) => {
   const tickers = ['MXRF11', 'HGLG11', 'KNIP11', 'BBAS3', 'VALE3', 'WEGE3', 'IVVB11', 'PETR4', 'ITUB4'];
   try {
-    const b3Quotes = await Promise.all(tickers.map((t) => fetchYahooQuote(t)));
+    const b3Quotes = await Promise.all(tickers.map((t) => fetchMarketQuote(t)));
     const quotesMap: Record<string, any> = {};
     tickers.forEach((t, i) => {
       if (b3Quotes[i]) quotesMap[t] = b3Quotes[i];
@@ -353,7 +368,7 @@ app.post('/api/ai/analyze-risk', async (req: Request, res: Response) => {
   try {
     const { ticker, name, category, userRiskProfile = 'Moderado', intendedAmount = 5000 } = req.body;
     if (typeof ticker !== 'string' || !ticker.trim()) return res.status(400).json({ error: 'Informe o ticker do ativo.' });
-    const [quote, selic] = await Promise.all([fetchYahooQuote(ticker), fetchBacenSerie(432)]);
+    const [quote, selic] = await Promise.all([fetchMarketQuote(ticker), fetchBacenSerie(432)]);
     if (!quote) return res.status(503).json({ error: 'Cotação indisponível; a análise foi interrompida para evitar dados desatualizados.' });
     if (!selic) return res.status(503).json({ error: 'Taxa Selic oficial indisponível no Banco Central.' });
     const prompt = `Analise criticamente o ativo brasileiro ${ticker} (${name || ticker}), categoria informada ${category || 'não informada'}, perfil ${userRiskProfile}. Dados objetivos disponíveis: preço R$ ${quote.currentPrice}; variação observada hoje ${quote.dailyChangePct}%, em 5 dias ${quote.weeklyChangePct}%, em um mês ${quote.monthlyChangePct}%; Selic meta oficial ${selic.valor}% (BCB em ${selic.data}); aporte hipotético R$ ${Number(intendedAmount)}. As variações não são previsão. Não invente volatilidade histórica, Sharpe, liquidez, DY, garantias ou cenários de retorno. Devolva JSON com ticker, riskScore (1-10, deixando claro que é uma opinião qualitativa), riskLevel, liquidityTerm ("Não informado" se não puder ser demonstrado), executiveVerdict, pros (lista), cons (lista), macroSensitivity {selicUp,inflationUp,exchangeRate}. Diga que análise de IA não é recomendação financeira. Não calcule qualquer rendimento projetado.`;

@@ -29,8 +29,8 @@ export const YieldGoalsCard: React.FC<YieldGoalsCardProps> = ({
   const monthlyGoalBrl = dailyGoalBrl * 30;
 
   // Current real earnings
-  const currentDailyEarnings = holdings.reduce((acc, h) => acc + h.dailyReturnBrl, 0);
-  const currentMonthlyEarnings = holdings.reduce((acc, h) => acc + h.monthlyReturnBrl, 0);
+  const currentDailyEarnings = holdings.reduce((acc, h) => acc + (h.dailyReturnBrl ?? 0), 0);
+  const currentMonthlyEarnings = holdings.reduce((acc, h) => acc + (h.monthlyReturnBrl ?? 0), 0);
 
   const dailyProgressPct = dailyGoalBrl > 0 ? Math.max(0, Math.min((currentDailyEarnings / dailyGoalBrl) * 100, 100)) : 0;
   const remainingDailyBrl = Math.max(dailyGoalBrl - currentDailyEarnings, 0);
@@ -48,6 +48,7 @@ export const YieldGoalsCard: React.FC<YieldGoalsCardProps> = ({
     .filter(a => a.category === 'fiis' || a.category === 'renda_fixa')
     .slice(0, 2);
 
+  if (holdings.some((holding) => holding.dailyReturnBrl == null || holding.monthlyReturnBrl == null)) return <p className="text-xs text-slate-500">Rendimentos indisponíveis para comparar com esta meta.</p>;
   return (
     <div className="bg-gradient-to-br from-slate-900/90 to-[#101012] rounded-2xl border border-slate-800 p-5 sm:p-6 shadow-xl">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">

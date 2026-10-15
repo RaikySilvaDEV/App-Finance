@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, CalendarDays, RefreshCw } from 'lucide-react';
 import { Asset, PortfolioHolding } from '../types/finance';
 interface HistoryPoint { timestamp: number; close: number; }
-interface HistoryResponse { points: HistoryPoint[]; currency?: string; }
+interface HistoryResponse { points: HistoryPoint[]; currency?: string; source?: string; }
 interface Props { holdings: PortfolioHolding[]; isPrivateMode: boolean; assets: Asset[]; }
 export const GainsPerformanceCard: React.FC<Props> = ({ holdings, isPrivateMode, assets }) => {
   const totalValue = holdings.reduce((sum, holding) => sum + holding.currentValue, 0);
@@ -13,6 +13,7 @@ export const GainsPerformanceCard: React.FC<Props> = ({ holdings, isPrivateMode,
   const [ticker, setTicker] = useState(assets[0]?.ticker || '');
   const [period, setPeriod] = useState<'week' | 'month'>('month');
   const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [source, setSource] = useState('');
   const [currencyCode, setCurrencyCode] = useState('BRL');
   const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -26,7 +27,7 @@ export const GainsPerformanceCard: React.FC<Props> = ({ holdings, isPrivateMode,
     const controller = new AbortController();
     setLoading(true); setError(null);
     fetch(`/api/market/history/${encodeURIComponent(ticker)}`, { signal: controller.signal })
-      .then(async response => { const data: HistoryResponse & { error?: string } = await response.json(); if (!response.ok) throw new Error(data.error || 'Histórico indisponível.'); setCurrencyCode(data.currency || 'BRL'); return data.points; })
+      .then(async response => { const data: HistoryResponse & { error?: string } = await response.json(); if (!response.ok) throw new Error(data.error || 'Histórico indisponível.'); setCurrencyCode(data.currency || 'BRL'); setSource(data.source || 'Fonte não informada'); return data.points; })
       .then(points => setHistory(points || []))
       .catch(reason => { if (reason.name !== 'AbortError') { setHistory([]); setError(reason.message || 'Falha ao obter histórico.'); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
@@ -66,7 +67,7 @@ export const GainsPerformanceCard: React.FC<Props> = ({ holdings, isPrivateMode,
       <div className="flex items-center gap-2"><select aria-label="Ativo do gráfico" value={ticker} onChange={event => setTicker(event.target.value)} className="max-w-[180px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">{assets.map(asset => <option key={asset.ticker} value={asset.ticker}>{asset.ticker}</option>)}</select>
         <button onClick={() => setRefreshKey(value => value + 1)} disabled={loading || !ticker} className="rounded-lg border border-slate-700 p-2 text-slate-300 hover:bg-slate-800 disabled:opacity-50" title="Atualizar histórico" aria-label="Atualizar histórico"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}/></button></div>
     </div>
-    <div className="pt-5"><div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-white">Histórico de cotação · {ticker || '—'}</h3><SectionInfo title="Sobre o gráfico">Fechamentos diários de mercado, via Yahoo Finance. Não representa o patrimônio histórico da carteira.</SectionInfo></div>
+    <div className="pt-5"><div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-white">Histórico de cotação · {ticker || '—'}</h3><SectionInfo title="Sobre o gráfico">Fechamentos diários de mercado. Fonte: {source || 'consultando…'}. Não representa o patrimônio histórico da carteira.</SectionInfo></div>
       <div className="flex rounded-lg border border-slate-800 bg-slate-950 p-1">{(['week','month'] as const).map(value => <button key={value} onClick={() => setPeriod(value)} className={`rounded-md px-3 py-1.5 text-xs ${period === value ? 'bg-cyan-400 font-bold text-slate-950' : 'text-slate-400'}`}>{value === 'week' ? <><CalendarDays className="mr-1 inline h-3 w-3"/>1 semana</> : '1 mês'}</button>)}</div></div>
       <div className="relative h-[240px] rounded-xl border border-slate-800/70 bg-slate-950/60 p-2 sm:h-[300px]">
         {loading && <div className="absolute inset-0 z-10 grid place-items-center rounded-xl bg-slate-950/70 text-xs text-slate-400">Carregando histórico…</div>}
