@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { app } from '../server';
+import { app } from '../server.js';
 
 export default function handler(req: Request, res: Response) {
   const requestUrl = new URL(req.url || '/', `https://${req.headers.host || 'localhost'}`);

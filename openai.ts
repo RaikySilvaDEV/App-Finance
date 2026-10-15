@@ -1,4 +1,4 @@
-import { generateLocalAnalysis, isLocalAiEnabled } from './local-ai';
+import { generateLocalAnalysis, isLocalAiEnabled } from './local-ai.js';
 const schemas = {
   diagnostic: {
     type: 'object', additionalProperties: false,

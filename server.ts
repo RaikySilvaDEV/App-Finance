@@ -2,9 +2,9 @@ import express, { Request, Response } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { installAuth } from './auth';
-import { generateFinancialAnalysis } from './openai';
-import { localAiStatus, researchFinancialTopic, ensureLocalAiStarted, isLocalAiEnabled } from './local-ai';
+import { installAuth } from './auth.js';
+import { generateFinancialAnalysis } from './openai.js';
+import { localAiStatus, researchFinancialTopic, ensureLocalAiStarted, isLocalAiEnabled } from './local-ai.js';
 
 dotenv.config();
 
