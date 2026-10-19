@@ -17,7 +17,7 @@ import { PortfolioHolding, AssetCategory } from '../types/finance';
 interface AddHoldingModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddHolding: (holding: PortfolioHolding) => void;
+  onAddHolding: (holding: PortfolioHolding) => boolean;
 }
 
 export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({
@@ -115,8 +115,7 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({
       isLiveSynced: false,
     };
 
-    onAddHolding(newHolding);
-    onClose();
+    if (onAddHolding(newHolding)) onClose();
   };
 
   const handleBulkImport = () => {
@@ -155,11 +154,10 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({
             monthlyReturnPct: 0,
             isLiveSynced: false,
           };
-          onAddHolding(newHolding);
-          count++;
+          if (onAddHolding(newHolding)) count++;
         }
       }
-      setImportStatus(`${count} ativos importados com sucesso!`);
+      setImportStatus(count ? `${count} ativos adicionados. Novas posições respeitam o limite do seu plano.` : 'Nenhum ativo adicionado. Confira o formato e o limite do plano.');
       setTimeout(() => {
         onClose();
       }, 1000);

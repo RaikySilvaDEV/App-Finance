@@ -36,6 +36,7 @@ import { PlanningSection, ManualLoansPanel } from './components/PlanningSection'
 import { emptyPlanning, classifyTransactions } from './lib/planning';
 import type { PlanningData } from './lib/planning';
 import { AlertSummary, MoneyAvailable, SyncStatus } from './components/DailyControl';
+import { StatementImport } from './components/StatementImport';
 import { AccountsSection } from './components/AccountsSection';
 import { SectionInfo } from './components/SectionInfo';
 import { useControlData } from './lib/useControlData';
@@ -122,7 +123,27 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
   const [historyComplete, setHistoryComplete] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savingData, setSavingData] = useState(false);
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [providerBankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [manualBankAccounts, setManualBankAccounts] = useState<BankAccount[]>([]);
+  const [manualPremium, setManualPremium] = useState(false);
+  const holdingCount = useRef(holdings.length);
+  holdingCount.current = holdings.length;
+  const [manualError, setManualError] = useState('');
+  const [importVersion, setImportVersion] = useState(0);
+  const bankAccounts = useMemo(() => [...providerBankAccounts, ...manualBankAccounts], [providerBankAccounts, manualBankAccounts]);
+  async function reloadManualAccounts(signal?: AbortSignal) {
+    const response = await fetch('/api/manual/accounts', { signal });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Não foi possível carregar suas contas manuais.');
+    if (signal?.aborted) return;
+    setManualBankAccounts(data.accounts || []); setManualPremium(data.premium === true); setManualError('');
+  }
+  async function manualChanged() { await reloadManualAccounts(); setImportVersion((v) => v + 1); }
+  useEffect(() => {
+    const controller = new AbortController();
+    reloadManualAccounts(controller.signal).catch((error) => { if (!controller.signal.aborted) setManualError(error.message); });
+    return () => controller.abort();
+  }, []);
   const [providerInvestments, setProviderInvestments] = useState<any[]>([]);
   const [creditCards, setCreditCards] = useState<any[]>([]);
   const [loans, setLoans] = useState<any[]>([]);
@@ -132,7 +153,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
   const [bankDataLoading, setBankDataLoading] = useState(pluggyItemIds.length > 0);
   const [providerSyncError, setProviderSyncError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
-  const history = useFinancialHistory(syncVersion, transactions, { accounts: bankAccounts, investments: providerInvestments, creditCards, loans }, historyComplete, pluggyItemIds);
+  const history = useFinancialHistory(syncVersion, transactions, { accounts: providerBankAccounts, investments: providerInvestments, creditCards, loans }, historyComplete, pluggyItemIds, manualBankAccounts.map((a) => a.id), importVersion);
   const classifiedTransactions = useMemo(() => classifyTransactions(history.allTransactions, planning), [history.allTransactions, planning]);
   useEffect(() => {
     if (hasLoadedBankData || !controls.data.sync.cache?.length) return;
@@ -369,8 +390,11 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
   // Add real holding
   const handleAddHolding = (newHolding: PortfolioHolding) => {
+    if (!manualPremium && holdingCount.current >= 2) { showToast('O Free permite até 2 posições manuais. Premium de R$ 39,90/mês ainda não está disponível para contratação.'); return false; }
+    holdingCount.current++;
     setHoldings((prev) => [newHolding, ...prev]);
     showToast(`${newHolding.ticker} adicionado à sua carteira com sucesso!`);
+    return true;
   };
 
   // Remove holding
@@ -472,7 +496,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         />
       {/* Main Content Area */}
       <main id="overview" aria-busy={showDataSkeleton} className="min-w-0 flex-1 w-full px-4 pt-5 pb-24 sm:px-6 lg:px-7 lg:py-8 space-y-6">
-        <div><h1 className="text-2xl font-semibold tracking-tight text-white">{{ overview: 'Visão geral', accounts: 'Contas e cartões', assets: 'Ativos', ledger: 'Fluxo de caixa', market: 'Mercado', portfolio: 'Posições manuais', loans: 'Empréstimos', connections: 'Conexões', planning: 'Planejamento', learn: 'Aprender' }[activeTab]}</h1><SectionInfo title="Sobre esta seção">{{ overview: 'Uma visão das suas finanças conectadas.', accounts: 'Saldos bancários, cartões e limites.', assets: 'Seus investimentos conectados, organizados por classe ou instituição.', ledger: 'Acompanhe entradas, despesas e movimentações.', market: 'Indicadores e oportunidades de investimento.', portfolio: 'Acompanhe os ativos que você cadastrou.', loans: 'Empréstimos conectados e valores cadastrados por você.', connections: 'Suas instituições, atualizações e autorizações.', planning: 'Orçamento, compromissos, metas e histórico, salvos na sua conta.', learn: 'Aulas, simulador e conceitos para aprender no seu ritmo.' }[activeTab]}</SectionInfo></div>
+        <div><h1 className="text-2xl font-semibold tracking-tight text-white">{{ overview: 'Visão geral', accounts: 'Contas e cartões', assets: 'Ativos', ledger: 'Fluxo de caixa', market: 'Mercado', portfolio: 'Posições manuais', loans: 'Empréstimos', connections: 'Conexões', planning: 'Planejamento', learn: 'Aprender' }[activeTab]}</h1><SectionInfo title="Sobre esta seção">{{ overview: 'Suas finanças conectadas e cadastradas manualmente.', accounts: 'Saldos bancários, cartões e limites.', assets: 'Seus investimentos conectados, organizados por classe ou instituição.', ledger: 'Acompanhe entradas, despesas e movimentações.', market: 'Indicadores e oportunidades de investimento.', portfolio: 'Acompanhe os ativos que você cadastrou.', loans: 'Empréstimos conectados e valores cadastrados por você.', connections: 'Suas instituições, atualizações e autorizações.', planning: 'Orçamento, compromissos, metas e histórico, salvos na sua conta.', learn: 'Aulas, simulador e conceitos para aprender no seu ritmo.' }[activeTab]}</SectionInfo></div>
         {(savingData || saveError) && <p role="status" className="text-xs text-slate-500">{savingData ? 'Salvando seus dados…' : 'Dados ainda não salvos'}</p>}
         {saveError && <div role="alert" className="rounded-lg border border-rose-500/30 p-3 text-sm text-rose-300">{saveError}<button onClick={() => { setSavingData(true); saveUserData().then(() => setSaveError(null)).catch((error) => setSaveError(error.message)).finally(() => setSavingData(false)); }} className="ml-3 underline">Tentar salvar novamente</button></div>}
         {providerSyncError && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{providerSyncError}</p>}
@@ -484,7 +508,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         <AlertSummary data={planning} transactions={classifiedTransactions} controls={controlView} privateMode={isPrivateMode} onOpen={() => navigateToTab('planning')}/>
         <MoneyAvailable accounts={bankAccounts} cards={creditCards} investments={providerInvestments} loans={loans} data={planning} privateMode={isPrivateMode}/>
         <FinancialOverview accounts={bankAccounts} cards={creditCards} investments={providerInvestments} privateMode={isPrivateMode} onOpenAccounts={() => { setAccountsView('accounts'); navigateToTab('accounts'); }} onOpenCards={() => { setAccountsView('cards'); navigateToTab('accounts'); }} onOpenAssets={() => navigateToTab('assets')} onConnect={() => setIsOpenFinanceConsentOpen(true)}/>
-        <BalanceEvolution accounts={bankAccounts} transactions={history.allTransactions} isPrivateMode={isPrivateMode} snapshots={history.snapshots}/>
+        {providerBankAccounts.length > 0 && <BalanceEvolution accounts={providerBankAccounts} transactions={history.allTransactions} isPrivateMode={isPrivateMode} snapshots={history.snapshots}/>}
         {/* 1. Core Performance & Gains Dashboard (Diário, Semanal, Mensal, YTD) */}
         <details className="market-preview rounded-2xl border border-slate-800 bg-slate-900/40">
           <summary className="flex cursor-pointer items-center justify-between gap-3 p-5 text-sm font-medium text-slate-300">Cotações do mercado <span className="text-xs font-normal text-slate-500">Abrir gráfico +</span></summary>
@@ -497,12 +521,12 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
         </>}
 
-        {activeTab === 'accounts' && <AccountsSection initialTab={accountsView} accounts={bankAccounts} cards={creditCards} itemIds={pluggyItemIds} privateMode={isPrivateMode} onRemove={handleAccountUnlinked}/>}
+        {activeTab === 'accounts' && <AccountsSection initialTab={accountsView} manualTools={<>{manualError && <p role="alert" className="text-rose-300">{manualError}</p>}<StatementImport accounts={manualBankAccounts} onChanged={manualChanged} privateMode={isPrivateMode}/></>} accounts={bankAccounts} cards={creditCards} itemIds={pluggyItemIds} privateMode={isPrivateMode} onRemove={handleAccountUnlinked}/>}
 
         {activeTab === 'assets' && <ConnectedAssets snapshots={history.snapshots} section="investments" accounts={bankAccounts} investments={visibleProviderInvestments} creditCards={[]} isPrivateMode={isPrivateMode} />}
 
         {activeTab === 'loans' && <><ManualLoansPanel data={planning} onChange={setPlanning} privateMode={isPrivateMode}/><LoansSection loans={loans} complete={loansComplete} unsupported={loansUnsupported} isPrivateMode={isPrivateMode} onRefresh={() => fetchBankAccounts()} /></>}
-        {activeTab === 'connections' && <><SyncStatus data={controls.data} reload={controls.reload}/><ConnectionsSection onReconnect={(id) => { setReconnectItem(id); setIsOpenFinanceConsentOpen(true); }} itemIds={pluggyItemIds} onConnect={() => setIsOpenFinanceConsentOpen(true)} onRemove={(id) => { setPluggyItemIds((items) => items.filter((item) => item !== id)); showToast('Conexão removida do painel. A autorização bancária continua ativa.'); }}/></>}
+        {activeTab === 'connections' && <><SyncStatus data={controls.data} reload={controls.reload}/><ConnectionsSection onManual={() => navigateToTab('accounts')} onReconnect={(id) => { setReconnectItem(id); setIsOpenFinanceConsentOpen(true); }} itemIds={pluggyItemIds} onConnect={() => setIsOpenFinanceConsentOpen(true)} onRemove={(id) => { setPluggyItemIds((items) => items.filter((item) => item !== id)); showToast('Conexão removida do painel. A autorização bancária continua ativa.'); }}/></>}
 
         {activeTab === 'ledger' && (<>
         {/* 3. Real Movement Ledger (Extrato de Transferências e Aportes) */}
@@ -555,7 +579,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
           <div className="flex items-center space-x-2">
             <span className="font-bold text-slate-400">FinPulse</span>
             <span>•</span>
-            <span>Open Finance via Pluggy • somente leitura</span>
+            <span>Controle financeiro • contas manuais e extratos</span>
           </div>
           
         </div>
@@ -592,6 +616,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
       <OpenFinanceConsentModal
         isOpen={isOpenFinanceConsentOpen}
+        onManual={() => { setIsOpenFinanceConsentOpen(false); navigateToTab('accounts'); }}
         updateItem={reconnectItem}
         onClose={() => {
           setIsOpenFinanceConsentOpen(false); setReconnectItem(undefined);

@@ -37,6 +37,8 @@ export interface RealIndicators {
 }
 
 export interface BankAccount {
+  source?: 'manual';
+  lastImportAt?: string;
   id: string;
   providerItemId?: string;
   bankName: string;
@@ -61,6 +63,7 @@ export interface BankAccount {
 }
 
 export interface FinancialTransaction {
+  source?: 'import';
   creditCardMetadata?: { installmentNumber?: number; totalInstallments?: number; totalAmount?: number; purchaseDate?: string; billId?: string; cardNumber?: string };
   sourceAccountType?: 'BANK' | 'CREDIT';
   providerItemId?: string;

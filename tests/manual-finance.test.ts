@@ -1,0 +1,75 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import express from 'express';
+
+test('two users: manual accounts, quotas, confirmations, retries and provider isolation', async () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'finpulse-test-'));
+  process.env.FINPULSE_DATA_DIR = directory;
+  delete process.env.DATABASE_URL; delete process.env.DATABASE_URL_POOLED;
+  delete process.env.VERCEL; process.env.FINPULSE_OWNER_EMAIL = 'owner@example.com';
+  const { installAuth, financeStorage } = await import('../auth.js');
+  const { installManualFinance } = await import('../manual-finance.js');
+  const { installBankOnboarding } = await import('../bank-onboarding.js');
+  const app = express(); app.use(express.json({ limit: '2mb' }));
+  let providerCalls = 0;
+  installAuth(app, async () => { throw new Error('No provider'); }, async () => { providerCalls++; return 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'; });
+  installManualFinance(app); installBankOnboarding(app);
+  for (const route of ['accounts', 'transactions', 'investments', 'loans', 'bills', 'connections', 'investment-transactions']) app.get(`/api/open-finance/${route}`, (_req, res) => { providerCalls++; res.json({ ok: true }); });
+  const server = app.listen(0, '127.0.0.1'); await new Promise<void>((resolve) => server.once('listening', resolve));
+  const origin = `http://127.0.0.1:${(server.address() as any).port}`;
+  async function request(url: string, cookie = '', body?: unknown, method?: string) {
+    const response = await fetch(origin + url, { method: method || (body === undefined ? 'GET' : 'POST'), headers: { 'Content-Type': 'application/json', cookie }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    return { response, data: await response.json() };
+  }
+  try {
+    const alice = await request('/api/auth/register', '', { email: 'alice@example.com', password: 'secure-password-alice' });
+    const bob = await request('/api/auth/register', '', { email: 'bob@example.com', password: 'secure-password-bob' });
+    const a = alice.response.headers.get('set-cookie')!.split(';')[0], b = bob.response.headers.get('set-cookie')!.split(';')[0];
+    assert.equal((await request('/api/manual/accounts')).response.status, 401);
+    const accountInput = { bankName: 'Banco manual', accountType: 'corrente', accountNumber: '123', balance: 500 };
+    const created = await request('/api/manual/accounts', a, accountInput); assert.equal(created.response.status, 201);
+    const accountId = created.data.account.id;
+    assert.equal((await request('/api/manual/accounts', b)).data.accounts.length, 0);
+    assert.equal((await request('/api/manual/accounts', a, accountInput)).response.status, 403);
+    const simultaneous = await Promise.all([request('/api/manual/accounts', b, accountInput), request('/api/manual/accounts', b, accountInput)]);
+    assert.deepEqual(simultaneous.map((r) => r.response.status).sort(), [201, 403]);
+    assert.equal((await request(`/api/manual/accounts/${encodeURIComponent(accountId)}`, b, { balance: 1 }, 'PATCH')).response.status, 404);
+    const content = 'data;descricao;valor;id\n18/10/2026;Mercado;-12,34;one\n19/10/2026;Pix recebido;30,00;two';
+    const input = { accountId, filename: 'bank.csv', content };
+    assert.equal((await request('/api/manual/imports/preview', b, input)).response.status, 404);
+    const preview = await request('/api/manual/imports/preview', a, input); assert.equal(preview.response.status, 200);
+    assert.equal((await request('/api/user/history', a)).data.transactions.length, 0, 'preview must not save transactions');
+    const confirm = { batchId: preview.data.batchId, indices: [0, 1] };
+    assert.equal((await request('/api/manual/imports/confirm', b, confirm)).response.status, 410);
+    assert.equal((await request('/api/manual/imports/confirm', a, { ...confirm, indices: [999] })).response.status, 400);
+    const committed = await Promise.all([request('/api/manual/imports/confirm', a, confirm), request('/api/manual/imports/confirm', a, confirm)]);
+    assert.equal(committed.reduce((sum, r) => sum + r.data.imported, 0), 2);
+    assert.equal((await request('/api/manual/imports/confirm', a, confirm)).data.imported, 0);
+    const history = (await request('/api/user/history', a)).data.transactions;
+    assert.equal(history.length, 2); assert.equal(history.find((t: any) => t.direction === 'debit').amount, 12.34);
+    assert.equal((await request('/api/user/history', b)).data.transactions.length, 0);
+    const repeated = await request('/api/manual/imports/preview', a, input); assert.ok(repeated.data.rows.every((r: any) => r.duplicate));
+    const account = (await request('/api/manual/accounts', a)).data.accounts[0]; assert.equal(account.balance, 500); assert.ok(account.lastImportAt);
+    const otherId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+    for (const endpoint of ['accounts', 'transactions', 'investments', 'loans', 'bills', 'connections']) assert.equal((await request(`/api/open-finance/${endpoint}?itemId=${otherId}`, b)).response.status, 403, endpoint);
+    assert.equal(providerCalls, 0, 'unowned connections must fail before calling provider');
+    assert.equal((await request(`/api/open-finance/investment-transactions?investmentId=${otherId}`, b)).response.status, 403);
+    process.env.PLUGGY_CLIENT_ID = 'test'; process.env.PLUGGY_CLIENT_SECRET = 'test';
+    assert.equal((await request('/api/open-finance/connect-token', b, {})).response.status, 403);
+    const holdings = Array.from({ length: 3 }, (_, i) => ({ id: `${i}`, assetId: `${i}`, institutionId: 'bank' }));
+    assert.equal((await request('/api/user/state', a, { holdings, itemIds: [] }, 'PUT')).response.status, 400);
+    assert.equal((await request('/api/user/state', a, { holdings: holdings.slice(0, 2), itemIds: [] }, 'PUT')).response.status, 200);
+    // Premium is server-managed; no client request can grant this entitlement.
+    financeStorage.local().prepare('UPDATE finance_entitlements SET premium_until=? WHERE user_id=?').run(Date.now() + 86400000, alice.data.user.id);
+    assert.equal((await request('/api/manual/accounts', a, accountInput)).response.status, 201);
+    assert.equal((await request('/api/user/state', a, { holdings, itemIds: [] }, 'PUT')).response.status, 200);
+    financeStorage.local().prepare('UPDATE finance_entitlements SET premium_until=0 WHERE user_id=?').run(alice.data.user.id);
+    assert.equal((await request('/api/user/state', a, { holdings, itemIds: [] }, 'PUT')).response.status, 200, 'downgrade retains existing positions');
+    assert.equal((await request('/api/manual/accounts', a, accountInput)).response.status, 403);
+    financeStorage.local().prepare('UPDATE statement_batches SET expires=0 WHERE user_id=?').run(alice.data.user.id);
+    assert.equal((await request('/api/manual/imports/confirm', a, confirm)).response.status, 410);
+  } finally { await new Promise<void>((resolve) => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }); }
+});

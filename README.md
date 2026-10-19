@@ -1,6 +1,23 @@
 # FinPulse Finance
 
-Painel financeiro pessoal com consulta somente leitura por Open Finance via Pluggy, indicadores do Banco Central, cotações de mercado e diagnóstico por IA local com Ollama ou OpenAI.
+Painel financeiro com contas manuais, importação de extratos, consulta pessoal somente leitura por Open Finance via Pluggy, indicadores do Banco Central, cotações de mercado e diagnóstico por IA local com Ollama ou OpenAI.
+
+## Contas manuais e importação OFX/CSV
+
+Em **Contas e cartões → Contas**, cadastre uma conta manual, informe o saldo e selecione o extrato. Confira a prévia, desmarque linhas indesejadas e confirme. As movimentações ficam em **Fluxo de caixa** e no planejamento. Nome, número e saldo informado podem ser corrigidos em **Editar conta e saldo**. Cada usuário acessa somente suas contas, prévias e histórico.
+
+- OFX bancário em BRL, uma conta por arquivo, com `FITID`. Não aceita extratos de cartão, múltiplas contas, XML com entidades ou movimentações incompletas.
+- CSV com cabeçalhos `data;descricao;valor;id` (`id` opcional). Datas `DD/MM/AAAA` ou `AAAA-MM-DD`; saídas negativas e entradas positivas. Há seleção de delimitador e decimal, suporte a campos entre aspas e leitura UTF-8/Windows-1252. Outros layouts precisam ser convertidos para essas colunas antes do envio.
+- Até 1 MB e 2.000 movimentações por arquivo. PDF e XLSX não são suportados nesta versão.
+- A prévia é calculada no servidor e expira após 30 minutos. Confirmar não confia em valores reenviados pelo navegador: usa os registros guardados para o usuário e a conta selecionados. Prévias vencidas são removidas na próxima preparação de importação daquele usuário.
+- A confirmação é atômica e ignora identificadores já salvos, inclusive em requisições simultâneas. Sem ID, a chave usa data, descrição, valor e ocorrência. Esse reconhecimento é aproximado: confira lançamentos iguais e não alterne OFX/CSV para o mesmo período, pois os IDs podem divergir.
+- Importar não altera o saldo informado nem comprova pagamento. O horário não é inventado: o lançamento guarda a data do extrato. Transferências são marcadas para revisão, aproveitando as correções e regras do planejamento. Contas manuais não são usadas na reconstrução automática de saldos históricos.
+
+O Free permite **1 conta manual e até 2 posições manuais de investimento**. As verificações são feitas no servidor; alocação de vagas de contas é protegida contra concorrência. Posições legadas acima do limite continuam visíveis e editáveis sem novas posições. A estrutura `finance_entitlements` reserva `premium_until` para concessões confiáveis do backend, mas não existe checkout nem endpoint público que ative Premium. O preço planejado é **R$ 39,90/mês**, sem plano anual; a contratação permanece indisponível. O limite técnico atual de contas manuais no Premium é 100, não uma promessa de acesso ilimitado. Ao expirar o benefício, dados existentes são preservados e novas adições acima do Free são bloqueadas.
+
+A integração pessoal existente foi preservada. Mantenha `PLUGGY_CONNECTION_MODE=personal`, `PLUGGY_BUSINESS_ENABLED=false` e configure `FINPULSE_OWNER_EMAIL` com seu e-mail. Sem acesso comercial, os demais usuários são direcionados ao cadastro manual e à importação; não recebem autorização de conectar bancos. Ter Premium não libera o acesso comercial da Pluggy.
+
+Validação local: `npm test`, `npm run lint` e `npm run build`. Os testes usam SQLite temporário e usuários fictícios; cobrem isolamento, duplicatas, confirmações simultâneas, limites, downgrade e arquivos inválidos. A execução contra Neon e bancos reais deve ser validada em homologação antes de liberar em produção.
 
 ## Executar localmente
 
