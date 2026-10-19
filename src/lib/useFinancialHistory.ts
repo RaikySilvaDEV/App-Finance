@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BankAccount, FinancialTransaction } from '../types/finance';
 export type SavedSnapshot = { date: string; capturedAt: string; accounts: BankAccount[]; investments: any[]; creditCards: any[]; loans: any[] };
-export function useFinancialHistory(syncVersion: number, transactions: FinancialTransaction[], snapshot: Omit<SavedSnapshot, 'date' | 'capturedAt'>, complete: boolean, itemIds: string[]) {
+export function useFinancialHistory(syncVersion: number, transactions: FinancialTransaction[], snapshot: Omit<SavedSnapshot, 'date' | 'capturedAt'>, complete: boolean, itemIds: string[], manualAccountIds: string[] = [], importVersion = 0) {
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [archived, setArchived] = useState<FinancialTransaction[]>([]);
   const [snapshots, setSnapshots] = useState<SavedSnapshot[]>([]);
@@ -24,7 +24,7 @@ export function useFinancialHistory(syncVersion: number, transactions: Financial
     const controller = new AbortController();
     load(controller.signal).catch((reason) => { if (!controller.signal.aborted) setError(reason.message); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, []);
+  }, [importVersion]);
   useEffect(() => {
     const controller = new AbortController();
     const refresh = () => { if (!document.hidden) load(controller.signal).catch((reason) => { if (!controller.signal.aborted) setError(reason.message); }); };
@@ -54,6 +54,6 @@ export function useFinancialHistory(syncVersion: number, transactions: Financial
   }, [syncVersion]);
   const deleted = new Set(deletedIds);
   // The server archive is canonical when background notifications have corrected a record.
-  const allTransactions = [...new Map([...transactions, ...archived].filter((tx) => !deleted.has(tx.id) && itemIds.includes(tx.providerItemId || '')).map((tx) => [tx.id, tx])).values()].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  const allTransactions = [...new Map([...transactions, ...archived].filter((tx) => !deleted.has(tx.id) && (tx.source === 'import' ? manualAccountIds.includes(tx.sourceAccountId) : itemIds.includes(tx.providerItemId || ''))).map((tx) => [tx.id, tx])).values()].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   return { allTransactions, snapshots, error, saving, loading, total };
 }

@@ -218,7 +218,7 @@ export const TransactionLedgerSection: React.FC<TransactionLedgerSectionProps> =
 
   const handleCopyReceipt = (tx: FinancialTransaction) => {
     const text = `
-Lançamento bancário consultado pela Pluggy
+${tx.source === 'import' ? 'Lançamento importado de arquivo pelo usuário' : 'Lançamento bancário consultado pela Pluggy'}
 Referência da transação: ${tx.id}
 Data: ${tx.timestamp}
 Valor: ${formatCurrency(tx.amount, tx.currencyCode || 'BRL')}
@@ -395,7 +395,7 @@ Descrição: ${tx.description}
                     </span>
                   </div>
                   <p className="mt-1 truncate text-[10px] text-slate-400">
-                    <span className="text-slate-500">Banco</span> <strong className="inline-flex items-center gap-1.5 font-medium text-slate-300"><BankLogo name={tx.sourceAccountName} className="h-5 w-5"/>{tx.sourceAccountName}</strong><span className="ml-1">· {tx.sourceAccountType === 'CREDIT' ? 'Cartão' : 'Conta'}</span>
+                    <span className="text-slate-500">Banco</span> <strong className="inline-flex items-center gap-1.5 font-medium text-slate-300"><BankLogo name={tx.sourceAccountName} className="h-5 w-5"/>{tx.sourceAccountName}</strong><span className="ml-1">· {tx.source === 'import' ? 'Arquivo importado' : tx.sourceAccountType === 'CREDIT' ? 'Cartão' : 'Conta'}</span>
                   </p>
 
                 </div>
@@ -458,7 +458,7 @@ Descrição: ${tx.description}
                 {formatCurrency(selectedReceipt.amount, selectedReceipt.currencyCode || 'BRL')}
               </div>
               <span className="text-xs text-emerald-400 font-bold block mt-1">
-                Registro retornado pela instituição financeira
+                {selectedReceipt.source === 'import' ? 'Importado de arquivo · sem validação bancária automática' : 'Registro retornado pela instituição financeira'}
               </span>
             </div>
 
@@ -468,7 +468,7 @@ Descrição: ${tx.description}
                 <span className="text-white font-bold">{selectedReceipt.type}</span>
               </div>
               <div className="flex justify-between border-b border-slate-900 pb-1.5">
-                <span className="text-slate-400">Data e Hora:</span>
+                <span className="text-slate-400">{selectedReceipt.source === 'import' ? 'Data do extrato:' : 'Data e Hora:'}</span>
                 <span className="text-white">{selectedReceipt.timestamp}</span>
               </div>
               <div className="flex justify-between border-b border-slate-900 pb-1.5">

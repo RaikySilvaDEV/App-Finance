@@ -11,6 +11,7 @@ import { installHistory } from './history.js';
 import { createEmailIntegration } from './email.js';
 import { installGoogleAuth } from './google-auth.js';
 import { ownedConnections, appendUserConnection } from './connection-ownership.js';
+import { premiumEnabled } from './manual-finance.js';
 
 type UserRecord = { id: string; email: string; password: string; state: string };
 type SessionUser = Pick<UserRecord, 'id' | 'email' | 'state'>;
@@ -135,6 +136,15 @@ async function saveState(id: string, state: object) {
 
 function readState(user: SessionUser) { return JSON.parse(user.state || '{}'); }
 
+async function enforceInvestmentLimit(user: SessionUser, holdings: any[]) {
+  if (await premiumEnabled(user.id)) return;
+  const key = (row: any) => `${row?.id}:${row?.assetId}:${row?.institutionId}`;
+  if (holdings.some((row) => !row || typeof row.id !== 'string' || !row.id || row.id.length > 100) || new Set(holdings.map((row) => row.id)).size !== holdings.length) throw new Error('Posições manuais inválidas.');
+  const incoming = new Set(holdings.map(key));
+  const existing = new Set((readState(user).holdings || []).map(key));
+  if (incoming.size > 2 && [...incoming].some((id) => !existing.has(id))) throw new Error('O Free permite até 2 posições manuais. Seus dados existentes foram preservados. Premium planejado: R$ 39,90/mês, ainda sem contratação.');
+}
+
 function safeState(value: any) {
   if (!value || !Array.isArray(value.holdings) || !Array.isArray(value.itemIds) || value.holdings.length > 1000 || value.itemIds.length > 100) throw new Error('Dados inválidos.');
   if (!value.itemIds.every((id: unknown) => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id))) throw new Error('Conexão inválida.');
@@ -217,6 +227,7 @@ export function installAuth(app: Express, validateItem: (id: string, user: Sessi
   app.put('/api/user/state', async (req, res) => {
     try {
       const state = safeState(req.body);
+      await enforceInvestmentLimit(res.locals.user, state.holdings);
       const owned = readState(res.locals.user).itemIds || [];
       const migrated = readState(res.locals.user).migrated || false;
       if (state.itemIds.some((id) => !owned.includes(id))) return res.status(403).json({ error: 'Adicione a conexão antes de salvar.' });
@@ -234,7 +245,7 @@ export function installAuth(app: Express, validateItem: (id: string, user: Sessi
       const current = JSON.parse((db.prepare('SELECT state FROM users WHERE id=?').get(res.locals.user.id) as any).state || '{}');
       const itemIds = [...new Set<string>([...(current.itemIds || []), ...state.itemIds])].filter((id) => !removed.includes(id));
       await saveState(res.locals.user.id, { ...current, ...patch, itemIds }); res.json({ ok: true, itemIds });
-    } catch { res.status(400).json({ error: 'Não foi possível salvar os dados.' }); }
+    } catch (error) { res.status(400).json({ error: error instanceof Error && (error.message.startsWith('O Free permite') || error.message === 'Posições manuais inválidas.') ? error.message : 'Não foi possível salvar os dados.' }); }
   });
   app.post('/api/user/import', async (req, res) => {
     try {
@@ -243,6 +254,7 @@ export function installAuth(app: Express, validateItem: (id: string, user: Sessi
       if (existing.migrated) return res.status(409).json({ error: 'Esta conta já importou os dados do navegador.' });
       for (const id of state.itemIds) await validateItem(id, res.locals.user);
       const combined = { ...state, planning: existing.planning ?? state.planning, holdings: [...(existing.holdings || []), ...state.holdings], itemIds: [...new Set([...(existing.itemIds || []), ...state.itemIds])], migrated: true };
+      await enforceInvestmentLimit(res.locals.user, combined.holdings);
       await saveState(res.locals.user.id, combined); res.json(combined);
     } catch { res.status(400).json({ error: 'Falha ao importar. Seus dados antigos continuam neste navegador.' }); }
   });

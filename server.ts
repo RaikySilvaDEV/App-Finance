@@ -14,6 +14,7 @@ import { businessConnectionsEnabled, personalOwner } from './connection-ownershi
 import { providerTransaction } from './src/lib/providerTransaction.js';
 import { generateFinancialAnalysis } from './openai.js';
 import { localAiStatus, researchFinancialTopic, ensureLocalAiStarted, isLocalAiEnabled } from './local-ai.js';
+import { installManualFinance } from './manual-finance.js';
 
 dotenv.config();
 
@@ -36,6 +37,7 @@ app.use(express.json({ limit: '2mb' }));
 installSync(app);
 installAuth(app, authorizeConnection, async (id) => (await pluggyRequest(`/investments/${id}`)).itemId);
 installBankOnboarding(app);
+installManualFinance(app);
 installBrapi(app);
 installSyncUser(app);
 
