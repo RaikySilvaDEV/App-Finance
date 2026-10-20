@@ -2,6 +2,18 @@
 
 Painel financeiro com contas manuais, importação de extratos, consulta pessoal somente leitura por Open Finance via Pluggy, indicadores do Banco Central, cotações de mercado e diagnóstico por IA local com Ollama ou OpenAI.
 
+## Instalar como aplicativo (PWA)
+
+Após publicar esta versão em HTTPS, abra o FinPulse no Chrome do Android e use **Instalar app** na faixa superior. Quando o navegador disponibilizar o convite de instalação, o botão abre o convite nativo. Caso contrário, mostra instruções para o menu do navegador. No iPhone, use Compartilhar → Adicionar à Tela de Início. Após a instalação, abra pelo ícone FinPulse na tela inicial; o manifesto solicita uma janela independente (`standalone`). A disponibilidade da instalação é controlada pelo navegador.
+
+O login continua usando a sessão segura do aplicativo. O PWA não inclui APK, publicação na Play Store ou notificações push. Login, consultas financeiras e importações exigem internet. Se a conexão cair durante o uso, uma faixa avisa que os dados podem estar desatualizados; ao tentar reabrir sem rede, uma tela pública oferece tentar novamente. A tela offline só fica disponível após ao menos uma visita online com instalação bem-sucedida do service worker.
+
+O service worker é registrado apenas no build de produção (`npm run build` e `npm start`, com `NODE_ENV=production`, ou na Vercel). Em desenvolvimento, não é registrado. Seu cache tem uma lista fechada de recursos públicos: tela offline, manifesto e ícones. Não guarda HTML do aplicativo, respostas da API, tokens de retorno OAuth, arquivos de extratos ou dados financeiros. Navegações usam rede com `cache: no-store`; requisições `/api`, métodos diferentes de GET e outros domínios não são interceptados. As regras existentes de autenticação e separação por usuário continuam no backend.
+
+Na Vercel, `/sw.js` e o manifesto são arquivos estáticos de `dist`; as rotas `/api` mantêm o encaminhamento existente. O worker recebe cabeçalhos para evitar versões desatualizadas. Ao mudar a tela offline ou os ícones, incremente `VERSION` em `public/sw.js`. A atualização do worker não força recarregamento de formulários abertos.
+
+Validação: `npm test` inclui manifesto, dimensões dos ícones, isolamento de cache, rotas excluídas e resposta offline, além dos testes financeiros. Para homologar no celular: publique a branch em HTTPS, instale pelo Chrome, abra pelo ícone, confira o login, ative modo avião e reabra o app. Deve aparecer a tela sem conexão, sem dados financeiros. Volte à internet e confirme que login e importação continuam funcionando. A instalação efetiva no Android depende dessa verificação em dispositivo.
+
 ## Contas manuais e importação OFX/CSV
 
 Em **Contas e cartões → Contas**, cadastre uma conta manual, informe o saldo e selecione o extrato. Confira a prévia, desmarque linhas indesejadas e confirme. As movimentações ficam em **Fluxo de caixa** e no planejamento. Nome, número e saldo informado podem ser corrigidos em **Editar conta e saldo**. Cada usuário acessa somente suas contas, prévias e histórico.
