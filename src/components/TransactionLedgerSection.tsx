@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CalendarDays,
+  Search,
 } from 'lucide-react';
 import { BankAccount, FinancialTransaction } from '../types/finance';
 import { BankLogo } from './BankLogo';
@@ -60,6 +61,7 @@ export const TransactionLedgerSection: React.FC<TransactionLedgerSectionProps> =
   const [copied, setCopied] = useState<boolean>(false);
   const [visibleCount, setVisibleCount] = useState(20);
   const [filterType, setFilterType] = useState<'all' | 'debit' | 'credit'>('all');
+  const [search, setSearch] = useState('');
   const [filterBank, setFilterBank] = useState('all');
   const [filterNature, setFilterNature] = useState('all');
   const [spendPeriod, setSpendPeriod] = useState<'month' | 'all' | 'custom'>('month');
@@ -79,6 +81,8 @@ export const TransactionLedgerSection: React.FC<TransactionLedgerSectionProps> =
   const cashMonthTransactions = useMemo(() => transactions.filter((transaction) => transaction.type === 'account_transaction' && brazilDateKey(transaction.timestamp).slice(0, 7) === cashMonth), [transactions, cashMonth]);
   const cashFlowTransactions = cashMonthTransactions.filter((transaction) => filterBank === 'all' || transaction.sourceAccountName === filterBank);
   const filtered = cashFlowTransactions.filter((transaction) => {
+    const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+    if (search.trim() && !normalize(`${transaction.description} ${transaction.sourceAccountName} ${transaction.displayCategory}`).includes(normalize(search.trim()))) return false;
     if (filterNature !== 'all' && transaction.nature !== filterNature) return false;
     if (filterType !== 'all' && (transaction.type !== 'account_transaction' || transaction.direction !== filterType)) return false;
     if (filterBank !== 'all' && transaction.sourceAccountName !== filterBank) return false;
@@ -232,7 +236,7 @@ Descrição: ${tx.description}
   };
 
   return (
-    <div className="bg-slate-900/50 rounded-2xl border border-slate-800 p-4 sm:p-5">
+    <div className="ledger-workspace">
       <section className="my-4 overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/40" aria-labelledby="cashflow-heading">
         <div className="flex flex-col gap-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-cyan-950/30 to-slate-950 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="flex items-center gap-3"><div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-2 text-cyan-300"><CalendarDays className="h-4 w-4" /></div><div><h4 id="cashflow-heading" className="text-sm font-bold text-white">Resumo do mês</h4></div></div>
@@ -250,7 +254,7 @@ Descrição: ${tx.description}
           <SectionInfo title="Como interpretar o extrato">Entradas e saídas são movimentações de contas bancárias, incluindo transferências; não equivalem a renda e consumo. Os gastos por categoria incluem compras de cartão, mas excluem faturas, aplicações, empréstimos e transferências. PIX sem identificação fica para revisão. Classificações automáticas são sugestões; você pode corrigir em cada lançamento.</SectionInfo>
           {Array.from(monthlyTotals, ([currency, totals]) => <div key={currency} className="space-y-3">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{currency}</p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
               <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/[0.04] p-3"><span className="text-[10px] text-slate-400">Entradas confirmadas</span><strong className="mt-1 block text-base font-bold text-emerald-300 tabular-nums">{formatCurrency(totals.income, currency)}</strong><span className="text-[10px] text-slate-500">{totals.incomeCount} créditos</span></div>
               <div className="rounded-xl border border-rose-500/15 bg-rose-500/[0.04] p-3"><span className="text-[10px] text-slate-400">Saídas confirmadas</span><strong className="mt-1 block text-base font-bold text-rose-300 tabular-nums">{formatCurrency(totals.expense, currency)}</strong><span className="text-[10px] text-slate-500">{totals.expenseCount} débitos</span></div>
               <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/[0.04] p-3"><span className="text-[10px] text-slate-400">Diferença do período</span><strong className={`mt-1 block text-base font-bold tabular-nums ${totals.income - totals.expense < 0 ? 'text-rose-300' : 'text-cyan-200'}`}>{formatCurrency(totals.income - totals.expense, currency)}</strong><span className="text-[10px] text-slate-500">Entradas menos saídas</span></div>
@@ -354,6 +358,7 @@ Descrição: ${tx.description}
         </> : <p className="rounded-xl border border-dashed border-slate-800 px-3 py-4 text-center text-xs text-slate-500">Nenhum débito encontrado para este período.</p>}
       </details>
 
+      <label className="ledger-search"><Search aria-hidden="true"/><input type="search" aria-label="Buscar movimentação" placeholder="Buscar descrição, banco ou categoria" value={search} onChange={(event) => { setSearch(event.target.value); setVisibleCount(20); }}/></label>
       {/* Filter tabs */}
       <div className="flex flex-col gap-2 border-b border-slate-800/60 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-[11px] font-semibold text-slate-300">Movimentações de {cashMonthLabel}</div>
@@ -380,7 +385,7 @@ Descrição: ${tx.description}
           return (
             <div
               key={tx.id}
-              className="my-2 flex flex-row items-center justify-between gap-3 rounded-xl border border-slate-800/80 bg-slate-950/45 p-3 transition-all hover:border-slate-700 hover:bg-slate-900/70 sm:flex-row sm:items-center sm:justify-between sm:p-4"
+              className="ledger-row"
             >
               <div className="flex min-w-0 flex-1 items-start gap-3">
                 <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${tx.direction === 'debit' ? 'border-rose-500/20 bg-rose-500/10 text-rose-300' : tx.direction === 'credit' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-cyan-500/20 bg-cyan-500/10 text-cyan-300'}`}>
@@ -437,8 +442,8 @@ Descrição: ${tx.description}
       {/* Transaction details */}
       {filtered.length > visibleCount && <button onClick={() => setVisibleCount((count) => count + 20)} className="mt-4 w-full rounded-lg border border-slate-700 py-3 text-xs text-slate-300 hover:bg-slate-800">Mostrar mais movimentações</button>}
       {selectedReceipt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 bg-black/80 backdrop-blur-md">
+          <div role="dialog" aria-modal="true" aria-label="Detalhes do lançamento" className="my-auto max-h-[90dvh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 shadow-2xl space-y-4">
             <div className="flex justify-between items-center pb-3 border-b border-slate-800">
               <div className="flex items-center space-x-2">
                 <ShieldCheck className="w-5 h-5 text-emerald-400" />
@@ -446,7 +451,7 @@ Descrição: ${tx.description}
               </div>
               <button
                 onClick={() => setSelectedReceipt(null)}
-                className="text-slate-400 hover:text-white"
+                aria-label="Fechar detalhes do lançamento" className="text-slate-400 hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
