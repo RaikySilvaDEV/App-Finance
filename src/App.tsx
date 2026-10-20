@@ -473,7 +473,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         </div>
       )}
 
-      {alertsOpen && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAlertsOpen(false); }}>
+      {alertsOpen && currentAlerts.length > 0 && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAlertsOpen(false); }}>
         <section role="dialog" aria-modal="true" aria-labelledby="finpulse-alert-title" className="flex max-h-[min(85dvh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#141419] shadow-2xl">
           <div className="flex items-start justify-between gap-4 border-b border-white/10 p-5">
             <div><div className="flex items-center gap-2"><Bell className="h-5 w-5 text-rose-400"/><h2 id="finpulse-alert-title" className="text-lg font-semibold text-white">Seus avisos</h2></div><p className="mt-1 text-xs text-slate-400">{currentAlerts.length ? `${currentAlerts.length} ${currentAlerts.length === 1 ? 'item para conferir' : 'itens para conferir'}` : 'Nenhum aviso pendente no momento'}</p></div>
