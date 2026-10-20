@@ -2,6 +2,16 @@
 
 Painel financeiro com contas manuais, importação de extratos, consulta pessoal somente leitura por Open Finance via Pluggy, indicadores do Banco Central, cotações de mercado e diagnóstico por IA local com Ollama ou OpenAI.
 
+## Navbar e avisos
+
+O topo mantém uma única navbar com menu lateral, marca, sincronização, privacidade e perfil. O menu de perfil reúne e-mail, conexões e sua quantidade, preferências de Google/lembretes e saída. Pode ser fechado por Escape, clique fora ou ao mover o foco para fora; links e ações existentes continuam disponíveis.
+
+O sino só é renderizado quando há avisos financeiros reais produzidos por `dailyAlerts`, deduplicados pelo identificador. O modal nunca é renderizado vazio e protege os detalhes no modo de privacidade. Selecionar um aviso abre o planejamento. O diálogo contém o foco por teclado, bloqueia a rolagem da página atrás e permite rolar listas longas dentro dele.
+
+Cada montagem da área autenticada avalia os avisos uma vez. Pendências já conhecidas aparecem imediatamente; uma entrada inicialmente sem avisos espera o carregamento inicial terminar antes de decidir. Atualizações por foco/polling não repetem uma janela já dispensada. Um novo login ou uma reabertura que monte novamente a área autenticada faz uma nova avaliação. O aplicativo não possui um fluxo próprio de WebAuthn/biometria: autenticação com senha preenchida por biometria/gerenciador segue a mesma entrada; apenas desbloquear o sistema operacional com a interface ainda aberta não informa um novo login ao site.
+
+Para reproduzir a verificação de interface, instale o navegador de teste com `npx playwright install chromium` e execute `npm run test:ux`. A suíte serve o build em um servidor local e intercepta todas as APIs com fixtures isoladas, sem usar contas reais, Neon ou Pluggy. Cobre 320, 375, 390, 768 e 1440 px, modo standalone emulado, avisos vazios/pendentes, privacidade, navegação, foco e reentrada. `FINPULSE_UX_SCREENSHOTS=/caminho/temporario npm run test:ux` grava capturas opcionais para revisão. Esses testes não substituem a conferência em um Android físico.
+
 ## Instalar como aplicativo (PWA)
 
 Após publicar esta versão em HTTPS, abra o FinPulse no Chrome do Android e use **Instalar app** na faixa superior. Quando o navegador disponibilizar o convite de instalação, o botão abre o convite nativo. Caso contrário, mostra instruções para o menu do navegador. No iPhone, use Compartilhar → Adicionar à Tela de Início. Após a instalação, abra pelo ícone FinPulse na tela inicial; o manifesto solicita uma janela independente (`standalone`). A disponibilidade da instalação é controlada pelo navegador.
