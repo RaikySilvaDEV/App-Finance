@@ -31,16 +31,9 @@ export function AccountsSection({ accounts, cards, itemIds, privateMode, onRemov
   }, [accounts]);
 
   return <section className="space-y-5" aria-label="Contas e cartões">
-    <header className="flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <p className="text-[11px] font-medium uppercase tracking-[0.13em] text-slate-500">Seu dinheiro, em um só lugar</p>
-        <h2 className="mt-1 text-xl font-semibold tracking-tight text-white sm:text-2xl">Contas e cartões</h2>
-        <p className="mt-1 text-xs text-slate-400">Acompanhe instituições, cartões e faturas com clareza.</p>
-      </div>
-      <span className="rounded-full border border-slate-800 bg-slate-900 px-3 py-1.5 text-[11px] text-slate-400">{accounts.length} {accounts.length === 1 ? 'conta' : 'contas'} · {cards.length} {cards.length === 1 ? 'cartão conectado' : 'cartões conectados'}</span>
-    </header>
 
-    <div role="tablist" aria-label="Contas e cartões" className="flex w-full gap-1 overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/70 p-1 sm:w-fit">
+
+    <div role="tablist" aria-label="Contas e cartões" className="workspace-tabs">
       {tabs.map(({ key, label, Icon }) => <button key={key} type="button" role="tab" id={`finance-tab-${key}`} aria-controls={`finance-panel-${key}`} aria-selected={tab === key} onClick={() => setTab(key)} className={`flex min-h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-xs font-medium transition-colors sm:flex-none ${tab === key ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}><Icon aria-hidden="true" className={`h-4 w-4 ${tab === key ? 'text-rose-400' : ''}`}/>{label}</button>)}
     </div>
 
@@ -51,7 +44,7 @@ export function AccountsSection({ accounts, cards, itemIds, privateMode, onRemov
         <p className="mt-2 text-[11px] text-slate-500">{totals.count} {totals.count === 1 ? 'conta em reais' : 'contas em reais'} · Valores informados pelas instituições ou por você</p>
       </div>}
       {manualTools}
-      <div className="space-y-2">
+      <div className="institution-list">
         {!!accounts.length && <h3 className="px-1 text-xs font-semibold text-slate-300">Suas instituições</h3>}
         {accounts.map((account) => <article key={account.id} className="group rounded-xl border border-slate-800 bg-[#111113] px-4 py-3.5 transition-colors hover:border-slate-700 hover:bg-[#171719]">
           <div className="flex min-w-0 items-center gap-3">

@@ -174,3 +174,9 @@ Leia o [guia oficial da API do Meu Pluggy](https://meu.pluggy.ai/api-guide) e a 
 - `HOST` e `PORT`: definem o endereço e a porta do servidor local.
 
 Não adicione `.env` ao Git nem compartilhe `PLUGGY_CLIENT_SECRET` ou `OPENAI_API_KEY` em mensagens. `.env.example` lista os nomes das variáveis sem credenciais.
+
+### Interface do espaço financeiro
+
+A página inicial reúne atalhos, o resumo existente, as últimas movimentações e os próximos vencimentos cadastrados. As prévias abrem as telas completas; não criam novos lançamentos ou somam limites ao saldo. Contas e cartões usam a mesma hierarquia visual, com origem manual/conectada identificada e detalhes secundários recolhidos. O extrato permite buscar descrição, banco e categoria dentro do mês e dos filtros selecionados. Recorrências e parcelas têm acesso direto no planejamento; metas, regras e histórico continuam no seletor de opções.
+
+`npm run test:workspace` verifica a navegação, busca, privacidade e ausência de transbordamento em 320, 375, 390, 768 e 1440 px. Usa APIs simuladas e dados sintéticos, sem acessar Neon ou Pluggy. Requer Chromium instalado pelo Playwright (`npx playwright install chromium`) ou `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`. O teste salva capturas temporárias em `/tmp/finpulse-design` para inspeção visual. Android físico e instalação real de PWA continuam exigindo validação no dispositivo.

@@ -97,7 +97,7 @@ try {
   }
   const { page, context, navigate, saved, getPlanning } = await setup(390, true);
   await page.getByRole('button', { name: 'Fechar avisos' }).waitFor(); await page.getByRole('button', { name: 'Fechar avisos' }).click();
-  await navigate('Planejamento'); await page.getByLabel('Mais opções de planejamento').selectOption('recurring');
+  await navigate('Planejamento'); await page.getByRole('tab', { name: 'Recorrências', exact: true }).click();
   await page.getByText(/Possível mudança no último lançamento/).waitFor();
   await page.getByRole('button', { name: 'Revisar e cadastrar conta', exact: true }).click();
   assert.equal(await page.getByLabel('Valor por mês (R$)').inputValue(), '60');
