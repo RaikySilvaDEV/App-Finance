@@ -21,6 +21,8 @@ interface HeaderProps {
   onOpenConsentModal?: () => void;
   onOpenAcademyModal?: () => void;
   onToggleSidebar: () => void;
+  alertCount: number;
+  onOpenAlerts: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ isPrivateMode, setIsPrivateMode, onSyncNow, isSyncing, onToggleSidebar, onOpenBankManagerModal, bankAccounts, connectedInstitutionsCount, userEmail, onLogout }) => (
