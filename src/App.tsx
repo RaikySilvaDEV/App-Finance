@@ -40,6 +40,7 @@ import { dailyAlerts } from './lib/dailyControl';
 import type { PlanningData } from './lib/planning';
 import { MoneyAvailable, SyncStatus } from './components/DailyControl';
 import { StatementImport } from './components/StatementImport';
+import { ManualCardsPanel } from './components/ManualCardsPanel';
 import { AccountsSection } from './components/AccountsSection';
 import { SectionInfo } from './components/SectionInfo';
 import { useControlData } from './lib/useControlData';
@@ -522,7 +523,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
         </>}
 
-        {activeTab === 'accounts' && <AccountsSection initialTab={accountsView} manualTools={<>{manualError && <p role="alert" className="text-rose-300">{manualError}</p>}<StatementImport accounts={manualBankAccounts} onChanged={manualChanged} privateMode={isPrivateMode}/></>} accounts={bankAccounts} cards={creditCards} itemIds={pluggyItemIds} privateMode={isPrivateMode} onRemove={handleAccountUnlinked}/>}
+        {activeTab === 'accounts' && <AccountsSection cardTools={<ManualCardsPanel data={planning} onChange={setPlanning} privateMode={isPrivateMode}/>} initialTab={accountsView} manualTools={<>{manualError && <p role="alert" className="text-rose-300">{manualError}</p>}<StatementImport accounts={manualBankAccounts} onChanged={manualChanged} privateMode={isPrivateMode}/></>} accounts={bankAccounts} cards={creditCards} itemIds={pluggyItemIds} privateMode={isPrivateMode} onRemove={handleAccountUnlinked}/>}
 
         {activeTab === 'assets' && <ConnectedAssets snapshots={history.snapshots} section="investments" accounts={bankAccounts} investments={visibleProviderInvestments} creditCards={[]} isPrivateMode={isPrivateMode} />}
 

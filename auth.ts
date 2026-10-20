@@ -145,10 +145,22 @@ async function enforceInvestmentLimit(user: SessionUser, holdings: any[]) {
   if (incoming.size > 2 && [...incoming].some((id) => !existing.has(id))) throw new Error('O Free permite até 2 posições manuais. Seus dados existentes foram preservados. Premium planejado: R$ 39,90/mês, ainda sem contratação.');
 }
 
-function safeState(value: any) {
+function safeState(value: any, previousPlanning?: ReturnType<typeof validatePlanning>) {
   if (!value || !Array.isArray(value.holdings) || !Array.isArray(value.itemIds) || value.holdings.length > 1000 || value.itemIds.length > 100) throw new Error('Dados inválidos.');
   if (!value.itemIds.every((id: unknown) => typeof id === 'string' && /^[0-9a-f-]{36}$/i.test(id))) throw new Error('Conexão inválida.');
-  return { holdings: value.holdings, itemIds: [...new Set<string>(value.itemIds)], profile: ['Moderado', 'Conservador', 'Arrojado'].includes(value.profile) ? value.profile : 'Moderado', planning: value.planning === undefined ? undefined : validatePlanning(value.planning) };
+  let planning = value.planning;
+  // An already-open older client does not know these optional fields. Preserve
+  // server-owned saved metadata when it omits them while editing a commitment.
+  if (planning && previousPlanning && typeof planning === 'object' && !Array.isArray(planning)) {
+    const previousBills = new Map((previousPlanning.bills || []).map((bill) => [bill.id, bill]));
+    planning = { ...planning, manualCards: planning.manualCards === undefined ? previousPlanning.manualCards || [] : planning.manualCards,
+      bills: Array.isArray(planning.bills) ? planning.bills.map((bill: any) => {
+        if (!bill || typeof bill !== 'object') return bill;
+        const previous = previousBills.get(bill.id);
+        return { ...bill, ...(bill.cardId === undefined && previous?.cardId ? { cardId: previous.cardId } : {}), ...(bill.recurrenceId === undefined && previous?.recurrenceId ? { recurrenceId: previous.recurrenceId } : {}) };
+      }) : planning.bills };
+  }
+  return { holdings: value.holdings, itemIds: [...new Set<string>(value.itemIds)], profile: ['Moderado', 'Conservador', 'Arrojado'].includes(value.profile) ? value.profile : 'Moderado', planning: planning === undefined ? undefined : validatePlanning(planning) };
 }
 
 function isDuplicateUser(error: unknown) {
@@ -226,7 +238,7 @@ export function installAuth(app: Express, validateItem: (id: string, user: Sessi
   app.get('/api/user/state', (_req, res) => res.json(readState(res.locals.user)));
   app.put('/api/user/state', async (req, res) => {
     try {
-      const state = safeState(req.body);
+      const state = safeState(req.body, readState(res.locals.user).planning);
       await enforceInvestmentLimit(res.locals.user, state.holdings);
       const owned = readState(res.locals.user).itemIds || [];
       const migrated = readState(res.locals.user).migrated || false;
