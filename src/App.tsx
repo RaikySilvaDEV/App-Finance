@@ -20,10 +20,10 @@ import {
   Activity,
   Plus,
   GraduationCap,
-  BookOpen,
-  Bell,
-  X
+  BookOpen
 } from 'lucide-react';
+import { AlertsDialog } from './components/AlertsDialog';
+import { useEntryAlerts } from './lib/useEntryAlerts';
 import { Header } from './components/Header';
 import { DataSkeleton } from './components/DataSkeleton';
 import { BankLogo } from './components/BankLogo';
@@ -75,7 +75,6 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
   // Global States
   const [isPrivateMode, setIsPrivateMode] = useState<boolean>(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [alertsOpen, setAlertsOpen] = useState(true);
   const [accountsView, setAccountsView] = useState<'accounts' | 'cards' | 'bills'>('accounts');
   const [activeTab, setActiveTab] = useState<MainTab>('overview');
   const [menuTransitioning, setMenuTransitioning] = useState(false);
@@ -170,13 +169,8 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
     setHasLoadedBankData(true);
   }, [controls.data.sync.cache, hasLoadedBankData, pluggyItemIds]);
   const controlView = { ...controls.data, loans };
-  const currentAlerts = useMemo(() => dailyAlerts(planning, classifiedTransactions, controlView.connections, undefined, controlView.loans), [planning, classifiedTransactions, controlView.connections, controlView.loans]);
-  useEffect(() => {
-    if (!alertsOpen) return;
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setAlertsOpen(false); };
-    document.addEventListener('keydown', escape);
-    return () => document.removeEventListener('keydown', escape);
-  }, [alertsOpen]);
+  const currentAlerts = useMemo(() => [...new Map(dailyAlerts(planning, classifiedTransactions, controlView.connections, undefined, controlView.loans).map((alert) => [alert.id, alert])).values()], [planning, classifiedTransactions, controlView.connections, controlView.loans]);
+  const alerts = useEntryAlerts(!history.loading && !bankDataLoading && !controls.loading, currentAlerts.length);
   // Modals
   const [selectedAssetForRisk, setSelectedAssetForRisk] = useState<Asset | null>(null);
   const [isRiskModalOpen, setIsRiskModalOpen] = useState<boolean>(false);
@@ -473,40 +467,20 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         </div>
       )}
 
-      {alertsOpen && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAlertsOpen(false); }}>
-        <section role="dialog" aria-modal="true" aria-labelledby="finpulse-alert-title" className="flex max-h-[min(85dvh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#141419] shadow-2xl">
-          <div className="flex items-start justify-between gap-4 border-b border-white/10 p-5">
-            <div><div className="flex items-center gap-2"><Bell className="h-5 w-5 text-rose-400"/><h2 id="finpulse-alert-title" className="text-lg font-semibold text-white">Seus avisos</h2></div><p className="mt-1 text-xs text-slate-400">{currentAlerts.length ? `${currentAlerts.length} ${currentAlerts.length === 1 ? 'item para conferir' : 'itens para conferir'}` : 'Nenhum aviso pendente no momento'}</p></div>
-            <button type="button" autoFocus onClick={() => setAlertsOpen(false)} aria-label="Fechar avisos" className="rounded-lg p-2 text-slate-400 hover:bg-white/5"><X className="h-5 w-5"/></button>
-          </div>
-          <div className="space-y-3 overflow-y-auto p-5">
-            {controls.data.error && <p role="alert" className="rounded-xl bg-amber-500/10 p-3 text-xs text-amber-200">{controls.data.error}</p>}
-            {currentAlerts.map((alert) => <button key={alert.id} type="button" onClick={() => { setAlertsOpen(false); navigateToTab('planning'); }} className="w-full rounded-xl border border-white/10 p-4 text-left hover:bg-white/5"><p className={`text-sm font-medium ${alert.severity === 'warning' ? 'text-amber-200' : 'text-white'}`}>{alert.title}</p><p className="mt-2 text-xs leading-relaxed text-slate-400">{isPrivateMode ? 'Detalhes ocultos no modo privacidade.' : alert.detail}</p><p className="mt-2 text-xs text-rose-300">Conferir no planejamento →</p></button>)}
-            {!currentAlerts.length && <p className="rounded-xl border border-white/10 p-4 text-sm text-slate-400">Tudo em dia com os dados disponíveis. Novos avisos aparecerão aqui quando houver algo para conferir.</p>}
-          </div>
-          <div className="border-t border-white/10 p-4"><button type="button" onClick={() => setAlertsOpen(false)} className="w-full rounded-xl bg-rose-500 px-4 py-3 text-sm font-semibold text-white">Continuar para o FinPulse</button></div>
-        </section>
-      </div>}
+      <AlertsDialog open={alerts.open} alerts={currentAlerts} privateMode={isPrivateMode} onClose={alerts.close}
+        onSelect={() => { alerts.close(); navigateToTab('planning'); }}/>
 
       {/* Global Header */}
       <Header
         isPrivateMode={isPrivateMode}
         setIsPrivateMode={setIsPrivateMode}
-        investorProfile={investorProfile}
-        setInvestorProfile={setInvestorProfile}
-        onOpenFinanceModal={() => setIsOpenFinanceConsentOpen(true)}
         isSyncing={isSyncing || bankDataLoading}
         onSyncNow={handleSyncNow}
         connectedInstitutionsCount={pluggyItemIds.length}
-        totalInstitutionsCount={bankAccounts.length}
-        realIndicators={realIndicators}
-        onOpenAddModal={() => setIsAddModalOpen(true)}
-        bankAccounts={bankAccounts}
         onOpenBankManagerModal={() => navigateToTab('connections')}
-        onOpenAcademyModal={() => navigateToTab('learn')}
         onToggleSidebar={() => setIsSidebarOpen(true)}
         alertCount={currentAlerts.length}
-        onOpenAlerts={() => setAlertsOpen(true)}
+        onOpenAlerts={alerts.show}
         userEmail={email}
         onLogout={() => void logoutSafely()}
       />
