@@ -17,12 +17,14 @@ export function findRecurrences(transactions: ClassifiedTransaction[], today = b
     const sample = recent.slice(-6), last = sample.at(-1)!;
     if (brazilDay(last.timestamp) < installmentDate(today, -2) || new Set(sample.map((row) => brazilDay(row.timestamp).slice(0, 7))).size !== sample.length) return [];
     const mean = sample.reduce((sum, row) => sum + row.amount, 0) / sample.length;
-    if (mean <= 0 || sample.some((row) => Math.abs(row.amount - mean) / mean > .1)) return [];
+    const previous = sample.slice(0, -1), base = previous.reduce((sum, row) => sum + row.amount, 0) / previous.length;
+    if (mean <= 0 || base <= 0 || previous.some((row) => Math.abs(row.amount - base) / base > .1) || Math.abs(last.amount - base) / base > .5) return [];
     for (let i = 1; i < sample.length; i++) {
       const interval = (Date.parse(`${brazilDay(sample[i].timestamp)}T12:00:00Z`) - Date.parse(`${brazilDay(sample[i - 1].timestamp)}T12:00:00Z`)) / 86400000;
       if (interval < 25 || interval > 35) return [];
     }
-    return [{ id, title: last.description, bank: last.sourceAccountName, category: last.displayCategory, direction: last.direction, currency: last.currencyCode || 'BRL', average: Math.round(mean * 100) / 100, occurrences: sample.length, lastDate: brazilDay(last.timestamp), nextDate: installmentDate(brazilDay(last.timestamp), 1) }];
+    const lastAmount = last.amount, previousAmount = sample.at(-2)!.amount;
+    return [{ id, title: last.description, bank: last.sourceAccountName, category: last.displayCategory, direction: last.direction, currency: last.currencyCode || 'BRL', average: Math.round(mean * 100) / 100, lastAmount, previousAmount, annualEstimate: Math.round(lastAmount * 100) * 12 / 100, changePct: previousAmount > 0 ? Math.round((lastAmount - previousAmount) / previousAmount * 10000) / 100 : 0, occurrences: sample.length, lastDate: brazilDay(last.timestamp), nextDate: installmentDate(brazilDay(last.timestamp), 1) }];
   });
 }
 

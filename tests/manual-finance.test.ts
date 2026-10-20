@@ -69,6 +69,22 @@ test('two users: manual accounts, quotas, confirmations, retries and provider is
     financeStorage.local().prepare('UPDATE finance_entitlements SET premium_until=0 WHERE user_id=?').run(alice.data.user.id);
     assert.equal((await request('/api/user/state', a, { holdings, itemIds: [] }, 'PUT')).response.status, 200, 'downgrade retains existing positions');
     assert.equal((await request('/api/manual/accounts', a, accountInput)).response.status, 403);
+    const cardPlanning = { budgets: [], goals: [], rules: [], overrides: {}, manualLoans: [], manualCards: [{ id: 'private-card', name: 'Cartão da Alice', bank: 'Banco', lastFour: '1234', closingDay: 20, dueDay: 28, creditLimit: 1000, availableLimit: null, active: true, updatedAt: new Date().toISOString(), cvv: 'must-not-persist' }], bills: [{ id: 'private-purchase', cardId: 'private-card', title: 'Compra da Alice', bank: 'Banco', category: 'Compras', amount: 50, dueDate: '2026-11-28', installments: 3, paid: [] }] };
+    assert.equal((await request('/api/user/state', a, { holdings, itemIds: [], planning: cardPlanning }, 'PUT')).response.status, 200);
+    const alicePlan = (await request('/api/user/state', a)).data.planning;
+    assert.equal(alicePlan.manualCards[0].name, 'Cartão da Alice');
+    assert.equal(alicePlan.manualCards[0].cvv, undefined, 'unknown sensitive fields must not persist');
+    assert.equal(alicePlan.bills[0].cardId, 'private-card');
+    const legacyPlanning: any = { ...cardPlanning, bills: cardPlanning.bills.map(({ cardId, ...bill }) => ({ ...bill, title: 'Editada por cliente antigo' })) };
+    delete legacyPlanning.manualCards;
+    assert.equal((await request('/api/user/state', a, { holdings, itemIds: [], planning: legacyPlanning }, 'PUT')).response.status, 200);
+    const preserved = (await request('/api/user/state', a)).data.planning;
+    assert.equal(preserved.manualCards[0].id, 'private-card');
+    assert.equal(preserved.bills[0].cardId, 'private-card', 'older clients must not erase saved card links');
+    assert.equal((await request('/api/user/state', b)).data.planning?.manualCards?.length || 0, 0);
+    assert.equal((await request('/api/user/state', b, { holdings: [], itemIds: [], planning: { ...cardPlanning, manualCards: [] } }, 'PUT')).response.status, 400, 'card references require an own-state card');
+    assert.equal((await request('/api/user/state', a, { holdings, itemIds: [], planning: { ...cardPlanning, manualCards: [{ ...cardPlanning.manualCards[0], lastFour: '1234567890123456' }] } }, 'PUT')).response.status, 400);
+    assert.equal((await request('/api/user/state', a)).data.planning.manualCards[0].lastFour, '1234', 'invalid update preserves saved data');
     financeStorage.local().prepare('UPDATE statement_batches SET expires=0 WHERE user_id=?').run(alice.data.user.id);
     assert.equal((await request('/api/manual/imports/confirm', a, confirm)).response.status, 410);
   } finally { await new Promise<void>((resolve) => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }); }

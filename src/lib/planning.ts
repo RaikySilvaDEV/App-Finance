@@ -6,10 +6,11 @@ export const expenseCategories = ['Alimentação', 'Mercado', 'Delivery', 'Trans
 export type CategoryRule = { id: string; text: string; category: string; nature: MovementNature; bank: string };
 export type MovementOverride = { category: string; nature: MovementNature };
 export type Budget = { id: string; month: string; category: string; limit: number };
-export type Bill = { id: string; title: string; bank: string; category: string; amount: number; dueDate: string; installments: number; paid: number[] };
+export type Bill = { id: string; title: string; bank: string; category: string; amount: number; dueDate: string; installments: number; paid: number[]; cardId?: string; recurrenceId?: string };
+export type ManualCard = { id: string; name: string; bank: string; lastFour: string; closingDay: number; dueDay: number; creditLimit: number | null; availableLimit: number | null; active: boolean; updatedAt: string };
 export type Goal = { id: string; name: string; target: number; saved: number; targetDate: string };
 export type ManualLoan = { id: string; bank: string; title: string; outstanding: number; installment: number; remaining: number; nextDue: string; alsoConnected: boolean; updatedAt: string };
-export type PlanningData = { budgets: Budget[]; bills: Bill[]; goals: Goal[]; manualLoans: ManualLoan[]; rules: CategoryRule[]; overrides: Record<string, MovementOverride>; recurrenceDecisions?: Record<string, 'ignored' | 'confirmed'> };
+export type PlanningData = { budgets: Budget[]; bills: Bill[]; goals: Goal[]; manualLoans: ManualLoan[]; manualCards?: ManualCard[]; rules: CategoryRule[]; overrides: Record<string, MovementOverride>; recurrenceDecisions?: Record<string, 'ignored' | 'confirmed'> };
 export const emptyPlanning = (): PlanningData => ({ budgets: [], bills: [], goals: [], manualLoans: [], rules: [], overrides: {} });
 export const normalizedText = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 export function brazilDay(value = new Date().toISOString()) {
@@ -75,5 +76,10 @@ export function validatePlanning(value: unknown): PlanningData {
   if (!data.overrides || typeof data.overrides !== 'object' || Array.isArray(data.overrides) || Object.keys(data.overrides).length > 20000 || !Object.entries(data.overrides).every(([key, row]) => text(key, 100) && row && text(row.category) && row.category.trim().length > 0 && Object.hasOwn(natureLabels, row.nature))) throw new Error('Classificação inválida.');
   const decisions = data.recurrenceDecisions || {};
   if (typeof decisions !== 'object' || Array.isArray(decisions) || Object.keys(decisions).length > 1000 || !Object.entries(decisions).every(([key, value]) => text(key, 500) && ['ignored', 'confirmed'].includes(value))) throw new Error('Recorrência inválida.');
-  return { budgets: data.budgets, bills: data.bills, goals: data.goals, manualLoans: data.manualLoans, rules: data.rules, overrides: data.overrides, recurrenceDecisions: decisions };
+  const manualCards = data.manualCards || [];
+  if (!Array.isArray(manualCards) || manualCards.length > 50 || new Set(manualCards.map((row) => row?.id)).size !== manualCards.length || !manualCards.every((row) => identity(row) && text(row.name) && row.name.trim() && text(row.bank) && row.bank.trim() && /^\d{0,4}$/.test(row.lastFour) && (row.lastFour.length === 0 || row.lastFour.length === 4) && Number.isInteger(row.closingDay) && row.closingDay >= 1 && row.closingDay <= 31 && Number.isInteger(row.dueDay) && row.dueDay >= 1 && row.dueDay <= 31 && (row.creditLimit === null || amount(row.creditLimit)) && (row.availableLimit === null || amount(row.availableLimit)) && (row.creditLimit === null || row.availableLimit === null || row.availableLimit <= row.creditLimit) && typeof row.active === 'boolean' && text(row.updatedAt, 40) && Number.isFinite(Date.parse(row.updatedAt)))) throw new Error('Cartão manual inválido.');
+  if (!data.bills.every((bill) => (bill.cardId === undefined || manualCards.some((card) => card.id === bill.cardId)) && (bill.recurrenceId === undefined || text(bill.recurrenceId, 500)))) throw new Error('Vínculo da conta inválido.');
+  if (!data.bills.every((bill) => !bill.cardId || (bill.installments <= 120 && bill.amount <= 1e9 && Math.abs(bill.amount * 100 - Math.round(bill.amount * 100)) < .0001))) throw new Error('Parcela de cartão inválida. Use até 120 parcelas e valores em centavos.');
+  const safeCards = manualCards.map(({ id, name, bank, lastFour, closingDay, dueDay, creditLimit, availableLimit, active, updatedAt }) => ({ id, name: name.trim(), bank: bank.trim(), lastFour, closingDay, dueDay, creditLimit, availableLimit, active, updatedAt }));
+  return { budgets: data.budgets, bills: data.bills, goals: data.goals, manualLoans: data.manualLoans, manualCards: safeCards, rules: data.rules, overrides: data.overrides, recurrenceDecisions: decisions };
 }

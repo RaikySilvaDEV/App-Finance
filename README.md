@@ -2,6 +2,20 @@
 
 Painel financeiro com contas manuais, importação de extratos, consulta pessoal somente leitura por Open Finance via Pluggy, indicadores do Banco Central, cotações de mercado e diagnóstico por IA local com Ollama ou OpenAI.
 
+## Cartões manuais e evolução de recorrências
+
+Em **Contas e cartões → Cartões**, é possível cadastrar cartões manuais sem conexão comercial, com banco, nome, últimos quatro dígitos opcionais, dias de fechamento/vencimento e limites informados pelo usuário. O sistema não solicita número completo, senha ou CVV. Os limites podem permanecer desconhecidos; não são calculados a partir das compras nem somados ao dinheiro disponível. É possível editar o cartão ou desativá-lo para novas compras sem apagar parcelas e histórico.
+
+Cada compra registra o valor **por parcela**, a quantidade e o primeiro vencimento confirmado pelo usuário. As parcelas são compromissos compartilhados com **Planejamento → Contas**, não transações novas: não alteram saldos nem duplicam movimentos do extrato. A central projeta seis meses, permite filtrar por cartão e informar/desmarcar pagamentos. A projeção usa o dia do primeiro vencimento, com ajuste para meses curtos; fechamento e vencimento do cadastro não decidem automaticamente o ciclo. A projeção não inclui compras não cadastradas, juros ou taxas e não substitui a fatura oficial. Evite cadastrar a mesma obrigação como compra e como fatura manual. Se houver pagamentos marcados, confira-os antes de alterar datas/valores da compra.
+
+Os cartões e faturas retornados pela Pluggy continuam separados e disponíveis. Esta implementação não chama novos produtos da Pluggy nem habilita pagamentos ou conexões comerciais.
+
+Em **Planejamento → Mais opções → Recorrências**, os padrões identificados mostram média, último valor, projeção de 12 meses baseada no último valor e possível variação em relação ao lançamento anterior. O detector continua exigindo três ocorrências mensais: os valores anteriores devem permanecer próximos da média (10%), e o último pode variar até 50%. Transferências, compras parceladas, padrões antigos ou histórico insuficiente não viram sugestões. A variação é um indício para revisão, não prova de assinatura ou reajuste. Moedas são mantidas separadas, sem conversão implícita. Padrões confirmados podem ser acompanhados em uma seção própria. O cadastro só acontece após revisão e cria um vínculo que impede cadastrar novamente a mesma recorrência por esse fluxo.
+
+Persistência: `manualCards` é um campo opcional no planejamento existente; compras usam `bills.cardId`, e recorrências confirmadas usam `bills.recurrenceId`. Dados legados sem esses campos continuam válidos. Quando um cliente antigo omite os novos campos ao editar, o servidor preserva os cartões e vínculos já salvos daquele usuário. A validação no servidor controla formato, referências, quantidade e centavos, retendo apenas os campos permitidos para cartões. Permanecem os limites técnicos de 500 compromissos; cartões manuais têm limite técnico de 50 e compras de cartão até 120 parcelas. Não há alteração de preço/plano nem nova cobrança.
+
+`npm test` cobre calendário, projeções, pagamento, desativação sem perda de histórico, recorrências e persistência/isolamento por usuário. `npm run test:cards` executa quatro cenários no Chromium com APIs simuladas: cartões em 320/390/1440 px e revisão de recorrências, sem tocar em bancos reais. A persistência de integração é validada em SQLite temporário; a execução no Neon deve ser homologada antes de liberar esta etapa em produção.
+
 ## Navbar e avisos
 
 O topo mantém uma única navbar com menu lateral, marca, sincronização, privacidade e perfil. O menu de perfil reúne e-mail, conexões e sua quantidade, preferências de Google/lembretes e saída. Pode ser fechado por Escape, clique fora ou ao mover o foco para fora; links e ações existentes continuam disponíveis.
