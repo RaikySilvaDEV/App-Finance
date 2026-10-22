@@ -1,4 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { CreditCard, ChevronRight } from 'lucide-react';
+import { BankLogo, bankDisplayName } from './BankLogo';
+import type { BankAccount } from '../types/finance';
 
 type Expense = { name: string; day: number; amount: number; note?: string };
 const BRL = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -8,7 +11,7 @@ const fixed: Expense[] = [
   { name: 'Celular', day: 20, amount: 59.32 },
   { name: 'Água e luz • estimativa', day: 25, amount: 180, note: 'Vencem após o dia 20; confirme as datas.' },
 ];
-export function PersonalBudgetPanel({ privateMode = false, itemIds = [] }: { privateMode?: boolean; itemIds?: string[] }) {
+export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards = [], accounts = [], onOpenCards }: { privateMode?: boolean; itemIds?: string[]; cards?: any[]; accounts?: BankAccount[]; onOpenCards?: () => void }) {
   const [helpDay, setHelpDay] = useState(20);
   const [helpConfirmed, setHelpConfirmed] = useState(false);
   const [market, setMarket] = useState(250);
@@ -58,20 +61,32 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [] }: { pri
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
       {[['Salários',1519.20],['Ajuda prevista',200],['Caixinha',100],['Despesas',expenses]].map(([label,amount])=><div key={String(label)} className="rounded-2xl border border-white/10 bg-white/[0.04] p-3"><p className="text-xs opacity-70">{label}</p><strong>{money(Number(amount))}</strong></div>)}
     </div>
-    <div className="space-y-3">
-      <div className="flex items-center justify-between"><h3 className="text-lg font-semibold">Faturas conectadas</h3><span className="text-sm text-cyan-300">{billsData ? money(totalCardDebt) : 'Consultando…'}</span></div>
-      {billsError && <div role="alert" className="text-sm text-amber-300">{billsError} <button type="button" className="underline" onClick={()=>setRefresh(x=>x+1)}>Tentar novamente</button></div>}
-      {!billsData && !billsError && <p role="status" className="text-sm text-slate-400">Buscando faturas reais nas conexões autorizadas…</p>}
-      {!!billsData?.unavailable && <p role="status" className="text-sm text-amber-300">Algumas instituições não disponibilizaram faturas. O total pode estar incompleto.</p>}
-      {billsData && pendingBills.length === 0 && <p className="text-sm text-slate-400">{billsData.unavailable ? 'Não foi possível confirmar todas as pendências.' : 'Nenhuma fatura pendente ou sem confirmação retornada pelas conexões.'}</p>}
-      <div className="grid sm:grid-cols-2 gap-3">{pendingBills.map((bill: any) => <article key={bill.providerItemId + ':' + bill.id} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 space-y-2">
-        <div className="flex justify-between items-center gap-2"><strong>{bill.bank || bill.cardName || 'Cartão conectado'}</strong><span className="text-xs text-slate-400">{bill.paymentStatus === 'unpaid' ? 'Não paga' : 'Pagamento não confirmado'}</span></div>
-        <p className="text-2xl font-semibold">{money(Number(bill.totalAmount))}</p>
-        <p className="text-xs text-slate-400">Fatura {bill.cardName || ''} · Vencimento {String(bill.dueDate || '').slice(0,10).split('-').reverse().join('/') || 'não informado'}</p>
-        <p className="text-xs text-slate-500">{bill.paymentStatus === 'unknown' ? 'Confira no banco antes de considerar como dívida.' : 'Valor total da fatura informado pela conexão.'}</p>
-      </article>)}</div>
-      <p className="text-xs text-slate-400">Dados obtidos do endpoint de faturas Pluggy já existente no FinPulse. Pagamento não confirmado não significa dívida comprovada. O valor total da fatura pode incluir pagamentos parciais e não equivale necessariamente ao saldo restante para quitação. O painel não realiza pagamentos.</p>
-    </div>
+    <article className="overview-card">
+      <div className="overview-card-heading">
+        <h2><CreditCard/>Cartões de crédito</h2>
+        <p className="overview-total text-rose-400">{billsData ? money(totalCardDebt) : '—'}</p>
+        <span className="overview-caption">Faturas não pagas ou sem confirmação · dados Pluggy</span>
+      </div>
+      {billsError && <div role="alert" className="px-5 py-3 text-xs text-amber-300">{billsError} <button type="button" className="underline" onClick={() => setRefresh(x => x + 1)}>Tentar novamente</button></div>}
+      {!billsData && !billsError && <p role="status" className="px-5 py-4 text-xs text-slate-400">Consultando faturas dos bancos…</p>}
+      {!!billsData?.unavailable && <p className="px-5 py-3 text-xs text-amber-300">Consulta parcial: algumas instituições não disponibilizaram faturas.</p>}
+      {cards.filter(card => (card.currencyCode || 'BRL') === 'BRL').map(card => {
+        const matching = pendingBills.filter((bill: any) => bill.providerItemId === card.providerItemId &&
+          (!bill.cardLastFour || !card.number || String(card.number).endsWith(String(bill.cardLastFour))));
+        if (billsData && matching.length === 0) return null;
+        const name = accounts.find(account => account.providerItemId === card.providerItemId)?.bankName || card.name || 'Cartão';
+        const bill = matching.sort((a: any, b: any) => String(b.dueDate || '').localeCompare(String(a.dueDate || '')))[0];
+        const amount = bill ? Number(bill.totalAmount) : null;
+        return <button type="button" key={card.id} onClick={onOpenCards} className="overview-row group">
+          <span className="flex min-w-0 items-center gap-3"><BankLogo name={name} className="h-8 w-8"/><span className="min-w-0 text-left"><span className="block truncate text-[13px] font-medium text-slate-200">{bankDisplayName(name)}</span><span className="mt-0.5 block text-[11px] text-slate-500">{card.name || 'Cartão'}{!privateMode && card.number ? ' · final ' + String(card.number).slice(-4) : ''}</span><span className="mt-0.5 block text-[11px] text-slate-500">{bill ? 'Vence ' + String(bill.dueDate || '').slice(0,10).split('-').reverse().join('/') + (bill.paymentStatus === 'unknown' ? ' · sem confirmação' : '') : 'Fatura indisponível'}</span></span></span>
+          <span className="flex shrink-0 items-center gap-2 text-xs font-medium text-rose-400 tabular-nums">{amount == null ? '—' : money(amount)}<ChevronRight className="h-3 w-3 text-slate-600"/></span>
+        </button>;
+      })}
+      {billsData && pendingBills.filter((bill: any) => !cards.some(card => card.providerItemId === bill.providerItemId)).map((bill: any) => <div key={bill.providerItemId + ':' + bill.id} className="overview-row"><span className="flex items-center gap-3"><BankLogo name={bill.bank || 'Cartão'} className="h-8 w-8"/><span className="text-xs text-slate-200">{bill.bank || bill.cardName || 'Cartão conectado'}<span className="block text-[11px] text-slate-500">Fatura sem cartão identificado</span></span></span><span className="text-xs font-medium text-rose-400">{money(Number(bill.totalAmount))}</span></div>)}
+      {billsData && pendingBills.length === 0 && !billsData.unavailable && <p className="px-5 py-5 text-xs text-slate-500">Nenhuma fatura pendente ou sem confirmação retornada.</p>}
+      <p className="border-t border-white/[0.04] px-5 py-3 text-[11px] leading-relaxed text-slate-500">O valor é o total informado da fatura, não necessariamente o restante para quitar. Faturas sem confirmação podem já ter sido pagas.</p>
+      {onOpenCards && <button type="button" onClick={onOpenCards} className="overview-card-link">Ver cartões e faturas <ChevronRight className="h-3 w-3"/></button>}
+    </article>
     <div className="grid sm:grid-cols-3 gap-3">
       <label className="text-sm">Mercado, higiene e limpeza (R$)<input aria-label="Orçamento de mercado" type="number" min="0" step="10" value={market} onChange={e=>setMarket(Math.max(0,Number(e.target.value)||0))} className="block w-full rounded-lg border bg-transparent p-2 mt-1"/></label>
       <label className="text-sm">Tanque do Corsa (estimativa, R$)<input aria-label="Estimativa de gasolina" type="number" min="0" step="10" value={fuel} onChange={e=>setFuel(Math.max(0,Number(e.target.value)||0))} className="block w-full rounded-lg border bg-transparent p-2 mt-1"/></label>
