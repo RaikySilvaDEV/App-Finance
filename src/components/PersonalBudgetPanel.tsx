@@ -4,10 +4,27 @@ import { BankLogo, bankDisplayName } from './BankLogo';
 import type { BankAccount } from '../types/finance';
 
 const BRL = (n: number, currency = 'BRL') => n.toLocaleString('pt-BR', { style: 'currency', currency });
+const PLAN_MONTHS = [{id:'2026-10',name:'Outubro 2026'},{id:'2026-11',name:'Novembro 2026'},{id:'2026-12',name:'Dezembro 2026'},{id:'2027-01',name:'Janeiro 2027'},{id:'2027-02',name:'Fevereiro 2027'}];
+const PLAN_ITEMS = [
+  {id:'oct-nubank',month:'2026-10',day:20,label:'Nubank — fatura vencida',amount:250,debt:true},
+  {id:'oct-mobile',month:'2026-10',day:20,label:'Internet celular — conferir atraso',amount:59.9,debt:false},
+  ...PLAN_MONTHS.slice(1).flatMap((month,i)=>[
+    {id:month.id+'-utilities',month:month.id,day:5,label:'Água e luz da avó',amount:160,debt:false},
+    {id:month.id+'-home',month:month.id,day:8,label:'Internet residencial',amount:89.9,debt:false},
+    {id:month.id+'-tire',month:month.id,day:10,label:'Atacadão — pneus '+(i+1)+'/4',amount:225,debt:true},
+    {id:month.id+'-mobile',month:month.id,day:20,label:'Internet celular',amount:59.9,debt:false},
+    ...(i===0?[{id:'nov-neon',month:month.id,day:23,label:'Neon — fatura conhecida',amount:458.08,debt:true}]:[])
+  ])
+];
+const PLAN_KEY='finpulse-personal-payments-v1';
+
 export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards = [], accounts = [], onOpenCards, mode = 'cards' }: {
   privateMode?: boolean; itemIds?: string[]; cards?: any[]; accounts?: BankAccount[]; onOpenCards?: () => void; mode?: 'cards' | 'planning';
 }) {
   const [showPlan, setShowPlan] = useState(true);
+  const [planMonth, setPlanMonth] = useState('2026-11');
+  const [checkedBills, setCheckedBills] = useState<string[]>([]);
+  const [planReady, setPlanReady] = useState(false);
   const [newNeon, setNewNeon] = useState(0);
   const [receivedAid, setReceivedAid] = useState(0);
   const [paidNubank, setPaidNubank] = useState(0);
@@ -20,6 +37,21 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
   const [billsData, setBillsData] = useState<{ bills: any[]; unavailable: number } | null>(null);
   const [billsError, setBillsError] = useState('');
   const [refresh, setRefresh] = useState(0);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(PLAN_KEY) || '{}');
+      if (Array.isArray(saved.checkedBills)) setCheckedBills(saved.checkedBills.filter((id: unknown) => typeof id === 'string' && PLAN_ITEMS.some(item=>item.id===id)));
+      if (PLAN_MONTHS.some(m=>m.id===saved.planMonth)) setPlanMonth(saved.planMonth);
+      if (typeof saved.newNeon === 'number') setNewNeon(Math.max(0,saved.newNeon));
+      if (typeof saved.market === 'number') setMarket(Math.max(0,saved.market));
+      if (typeof saved.fuel === 'number') setFuel(Math.max(0,saved.fuel));
+    } catch { /* browser storage unavailable */ }
+    setPlanReady(true);
+  }, []);
+  useEffect(() => {
+    if (!planReady) return;
+    try { window.localStorage.setItem(PLAN_KEY,JSON.stringify({checkedBills,planMonth,newNeon,market,fuel})); } catch { /* browser storage unavailable */ }
+  },[checkedBills,planMonth,newNeon,market,fuel,planReady]);
   const money = (amount: number, currency = 'BRL') => privateMode ? '••••••' : BRL(amount, currency);
 
   useEffect(() => {
@@ -141,6 +173,24 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
         <div className="flex justify-between text-sm"><span>Saldo pneus</span><strong>{money(tireDue)}</strong></div>
         <div className="flex justify-between border-t border-white/10 pt-2 text-sm"><span>Total estimado</span><strong className="text-rose-300">{money(debtTotal)}</strong></div>
         <p className="text-xs text-slate-400">Após separar a próxima parcela dos pneus, restam {money(afterTire)} para Nubank, Neon e imprevistos. Preserve uma margem de segurança. Juros e valores atualizados precisam ser conferidos no banco.</p>
+      </div>
+      <div className="space-y-3 rounded-xl border border-white/[0.06] p-3">
+        <div><h3 className="text-sm font-semibold">Calendário de pagamentos</h3><p className="mt-1 text-xs text-slate-400">Marque somente depois de pagar. As marcações ficam salvas neste navegador.</p></div>
+        <label className="block text-xs text-slate-400">Mês
+          <select value={planMonth} onChange={e=>setPlanMonth(e.target.value)} className={inputClass}>
+            {PLAN_MONTHS.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </label>
+        {PLAN_ITEMS.filter(item=>item.month===planMonth).map(item=><label key={item.id} className="flex cursor-pointer items-center gap-3 border-b border-white/[0.05] py-2">
+          <input type="checkbox" checked={checkedBills.includes(item.id)} onChange={e=>setCheckedBills(old=>e.target.checked?[...old,item.id]:old.filter(id=>id!==item.id))} className="h-4 w-4 accent-cyan-400"/>
+          <span className="min-w-0 flex-1"><span className={`block text-sm ${checkedBills.includes(item.id)?'text-slate-500 line-through':'text-slate-200'}`}>{item.label}</span><span className="text-xs text-slate-500">{String(item.day).padStart(2,'0')}/{item.month.slice(5)}/{item.month.slice(0,4)} · {item.debt?'Dívida':'Conta mensal'}</span></span>
+          <span className="text-sm tabular-nums">{money(item.amount)}</span>
+        </label>)}
+        <div className="space-y-1 border-t border-white/10 pt-3 text-sm">
+          <div className="flex justify-between"><span className="text-slate-400">Contas listadas pendentes neste mês</span><strong>{money(PLAN_ITEMS.filter(item=>item.month===planMonth&&!checkedBills.includes(item.id)).reduce((sum,item)=>sum+item.amount,0))}</strong></div>
+          <div className="flex justify-between"><span className="text-slate-400">Dívidas listadas pendentes até fevereiro</span><strong className="text-rose-300">{money(PLAN_ITEMS.filter(item=>item.debt&&!checkedBills.includes(item.id)).reduce((sum,item)=>sum+item.amount,0)+newNeon)}</strong></div>
+        </div>
+        <p className="text-xs leading-relaxed text-slate-500">Mercado e combustível são metas mensais separadas; não são contas quitadas. Novas compras Neon são adicionadas ao saldo estimado, sem duplicar a fatura conhecida. Juros e faturas futuras ainda não informadas não estão incluídos. Os campos de pagamentos parciais acima são estimativas separadas e não abatem esta lista; não registre o mesmo pagamento duas vezes.</p>
       </div>
       <p className="text-xs text-amber-300">Não use limite do cartão como renda. Pagar parcialmente pode gerar juros. Este controle é uma simulação temporária: as alterações não são salvas e não efetuam pagamentos.</p>
     </div>}
