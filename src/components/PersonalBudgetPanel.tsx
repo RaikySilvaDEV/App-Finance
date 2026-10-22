@@ -7,9 +7,15 @@ const BRL = (n: number, currency = 'BRL') => n.toLocaleString('pt-BR', { style: 
 export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards = [], accounts = [], onOpenCards, mode = 'cards' }: {
   privateMode?: boolean; itemIds?: string[]; cards?: any[]; accounts?: BankAccount[]; onOpenCards?: () => void; mode?: 'cards' | 'planning';
 }) {
-  const [showPlan, setShowPlan] = useState(false);
+  const [showPlan, setShowPlan] = useState(true);
+  const [newNeon, setNewNeon] = useState(0);
+  const [receivedAid, setReceivedAid] = useState(0);
+  const [paidNubank, setPaidNubank] = useState(0);
+  const [paidNeon, setPaidNeon] = useState(0);
+  const [paidTires, setPaidTires] = useState(0);
+  const [utilities, setUtilities] = useState(160);
   const [showBills, setShowBills] = useState(false);
-  const [market, setMarket] = useState(250);
+  const [market, setMarket] = useState(500);
   const [fuel, setFuel] = useState(270);
   const [billsData, setBillsData] = useState<{ bills: any[]; unavailable: number } | null>(null);
   const [billsError, setBillsError] = useState('');
@@ -45,11 +51,15 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
   const pendingBills = (billsData?.bills || []).filter((bill: any) =>
     bill.paymentStatus !== 'paid' && Number.isFinite(Number(bill.totalAmount)) &&
     Number(bill.totalAmount) > 0 && (bill.totalAmountCurrencyCode || 'BRL') === 'BRL');
-  const novemberBills = pendingBills.filter((bill: any) => String(bill.dueDate || '').startsWith('2026-11'));
-  const estimatedIncome = 827.35 + 691.85;
-  const estimatedFixed = 132.47 + 225 + 59.32 + 180;
-  const projected = estimatedIncome - estimatedFixed - market - 100 -
-    novemberBills.reduce((sum: number, bill: any) => sum + Number(bill.totalAmount), 0);
+  const salary = 1519.20;
+  const essential = utilities + 89.90 + 59.90 + market + fuel;
+  const available = salary + receivedAid - essential;
+  const tireDue = Math.max(0, 900 - paidTires);
+  const nubankDue = Math.max(0, 250 - paidNubank);
+  const neonDue = Math.max(0, 458.08 + newNeon - paidNeon);
+  const debtTotal = tireDue + nubankDue + neonDue;
+  const afterTire = available - Math.min(225, tireDue);
+  const inputClass = 'mt-1 block w-full rounded-xl border border-slate-700 bg-slate-900/50 p-2.5 text-sm text-slate-100';
 
   return <section className="space-y-5 text-slate-100" aria-label={mode === 'planning' ? 'Planejamento pessoal' : 'Meus cartões'}>
     <header className="space-y-1"><p className="text-xs font-medium uppercase tracking-widest text-slate-500">FinPulse</p><h2 className="text-2xl font-semibold tracking-tight">{mode === 'planning' ? 'Planejamento pessoal' : 'Meus cartões'}</h2><p className="text-sm text-slate-400">{mode === 'planning' ? 'Organize despesas e previsões em um só lugar.' : 'Saldos reais dos cartões conectados, iguais aos da Visão geral.'}</p></header>
@@ -100,24 +110,40 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
     </div>
 
     </>}
-    {mode === 'planning' && <>
-    <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025]">
-      <button type="button" onClick={() => setShowPlan(v => !v)} aria-expanded={showPlan} className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left">
-        <span className="flex items-center gap-3"><Wallet className="h-5 w-5 text-slate-400"/><span><span className="block text-sm font-semibold text-slate-200">Meu planejamento</span><span className="block pt-1 text-xs text-slate-500">Estimativas de novembro de 2026 · não são saldo bancário</span></span></span>
-        <ChevronRight className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${showPlan ? 'rotate-90' : ''}`}/>
-      </button>
-      {showPlan && <div className="space-y-4 border-t border-white/[0.06] px-4 py-4">
+    {mode === 'planning' && <div className="space-y-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4">
+      <div className="flex items-center gap-2"><Wallet className="h-5 w-5 text-cyan-300"/><h3 className="font-semibold">Proteção do salário</h3></div>
+      <p className="text-xs leading-relaxed text-slate-400">Salário: R$ 827,35 dia 5 + R$ 691,85 dia 20. Ajuda da mãe: até R$ 200 em dois domingos, conte somente o que já recebeu. Valores manuais deste painel não são movimentações bancárias.</p>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl bg-white/[0.04] p-3"><p className="text-xs text-slate-400">Salário mensal</p><p className="text-lg font-semibold">{money(salary)}</p></div>
+        <div className="rounded-xl bg-white/[0.04] p-3"><p className="text-xs text-slate-400">Disponível após essenciais</p><p className={`text-lg font-semibold ${available < 0 ? 'text-rose-400' : 'text-emerald-300'}`}>{money(available)}</p></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <label className="text-xs text-slate-400">Ajuda já recebida (R$)<input className={inputClass} type="number" min="0" max="200" value={receivedAid} onChange={e=>setReceivedAid(Math.min(200,Math.max(0,Number(e.target.value)||0)))}/></label>
+        <label className="text-xs text-slate-400">Água e luz · dia 5<input className={inputClass} type="number" min="0" value={utilities} onChange={e=>setUtilities(Math.max(0,Number(e.target.value)||0))}/></label>
+        <label className="text-xs text-slate-400">Mercado, limpeza e higiene<input className={inputClass} type="number" min="0" value={market} onChange={e=>setMarket(Math.max(0,Number(e.target.value)||0))}/></label>
+        <label className="text-xs text-slate-400">Combustível<input className={inputClass} type="number" min="0" value={fuel} onChange={e=>setFuel(Math.max(0,Number(e.target.value)||0))}/></label>
+      </div>
+      <div className="space-y-2 rounded-xl border border-white/[0.06] p-3 text-sm">
+        <p className="font-semibold">Contas e vencimentos</p>
+        {[[ 'Água e luz · dia 5', utilities ],['Internet residencial · dia 8',89.90],['Atacadão · dia 10 (nov–fev)',Math.min(225,tireDue)],['Internet celular · dia 20',59.90],['Mercado e higiene · mês',market],['Combustível · mês',fuel]].map(([label,value])=><div key={String(label)} className="flex justify-between gap-2 text-slate-300"><span>{label}</span><span className="tabular-nums">{money(Number(value))}</span></div>)}
+      </div>
+      <div className="space-y-3 rounded-xl border border-white/[0.06] p-3">
+        <p className="text-sm font-semibold">Quitar cartões · saldos manuais</p>
+        <p className="text-xs text-slate-400">Nubank R$ 250 vencidos; Neon R$ 458,08 em 23/11; pneus 4 × R$ 225. Registre pagamentos realizados e compras novas sem duplicar valores.</p>
         <div className="grid grid-cols-2 gap-3">
-          <div><p className="text-xs text-slate-500">Salários previstos</p><p className="mt-1 font-semibold">{money(estimatedIncome)}</p></div>
-          <div><p className="text-xs text-slate-500">Despesas fixas estimadas</p><p className="mt-1 font-semibold">{money(estimatedFixed)}</p></div>
+          <label className="text-xs text-slate-400">Novas compras Neon<input className={inputClass} type="number" min="0" value={newNeon} onChange={e=>setNewNeon(Math.max(0,Number(e.target.value)||0))}/></label>
+          <label className="text-xs text-slate-400">Nubank já pago<input className={inputClass} type="number" min="0" value={paidNubank} onChange={e=>setPaidNubank(Math.max(0,Number(e.target.value)||0))}/></label>
+          <label className="text-xs text-slate-400">Neon já pago<input className={inputClass} type="number" min="0" value={paidNeon} onChange={e=>setPaidNeon(Math.max(0,Number(e.target.value)||0))}/></label>
+          <label className="text-xs text-slate-400">Pneus já pagos<input className={inputClass} type="number" min="0" value={paidTires} onChange={e=>setPaidTires(Math.max(0,Number(e.target.value)||0))}/></label>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-xs text-slate-400">Mercado e higiene · estimativa (R$)<input type="number" min="0" step="10" value={market} onChange={e => setMarket(Math.max(0, Number(e.target.value) || 0))} className="mt-1 block w-full rounded-xl border border-slate-700 bg-transparent p-2.5 text-sm text-slate-100"/></label>
-          <label className="text-xs text-slate-400">Combustível · estimativa (R$)<input type="number" min="0" step="10" value={fuel} onChange={e => setFuel(Math.max(0, Number(e.target.value) || 0))} className="mt-1 block w-full rounded-xl border border-slate-700 bg-transparent p-2.5 text-sm text-slate-100"/></label>
-        </div>
-        <div className="border-t border-white/[0.06] pt-3"><p className="text-xs text-slate-500">Resultado estimado de novembro</p><p className="mt-1 text-xl font-semibold">{billsData && !billsData.unavailable ? money(projected) : 'Previsão incompleta'}</p><p className="mt-1 text-xs leading-relaxed text-slate-500">Inclui salários, despesas fixas, mercado, meta de R$ 100 para a caixinha e faturas com vencimento em novembro. Não inclui ajuda não confirmada nem combustível previsto para dezembro. Verifique possíveis despesas já incluídas na fatura para evitar duplicidade.</p></div>
-      </div>}
-    </div>
-    </>}
+        <div className="flex justify-between text-sm"><span>Saldo Nubank</span><strong>{money(nubankDue)}</strong></div>
+        <div className="flex justify-between text-sm"><span>Saldo Neon</span><strong>{money(neonDue)}</strong></div>
+        <div className="flex justify-between text-sm"><span>Saldo pneus</span><strong>{money(tireDue)}</strong></div>
+        <div className="flex justify-between border-t border-white/10 pt-2 text-sm"><span>Total estimado</span><strong className="text-rose-300">{money(debtTotal)}</strong></div>
+        <p className="text-xs text-slate-400">Após separar a próxima parcela dos pneus, restam {money(afterTire)} para Nubank, Neon e imprevistos. Preserve uma margem de segurança. Juros e valores atualizados precisam ser conferidos no banco.</p>
+      </div>
+      <p className="text-xs text-amber-300">Não use limite do cartão como renda. Pagar parcialmente pode gerar juros. Este controle é uma simulação temporária: as alterações não são salvas e não efetuam pagamentos.</p>
+    </div>}
+
   </section>;
 }
