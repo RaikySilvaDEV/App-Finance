@@ -528,7 +528,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
         </>}
 
-        {activeTab === 'accounts' && <AccountsSection cardTools={<ManualCardsPanel data={planning} onChange={setPlanning} privateMode={isPrivateMode}/>} initialTab={accountsView} manualTools={<>{manualError && <p role="alert" className="text-rose-300">{manualError}</p>}<StatementImport accounts={manualBankAccounts} onChanged={manualChanged} privateMode={isPrivateMode}/></>} accounts={bankAccounts} cards={creditCards} itemIds={pluggyItemIds} privateMode={isPrivateMode} onRemove={handleAccountUnlinked}/>}
+        {activeTab === 'accounts' && <AccountsSection cardTools={<ManualCardsPanel data={planning} onChange={setPlanning} privateMode={isPrivateMode} connectedCardCount={creditCards.length}/>} initialTab={accountsView} manualTools={<>{manualError && <p role="alert" className="text-rose-300">{manualError}</p>}<StatementImport accounts={manualBankAccounts} onChanged={manualChanged} privateMode={isPrivateMode}/></>} accounts={bankAccounts} cards={creditCards} itemIds={pluggyItemIds} privateMode={isPrivateMode} onRemove={handleAccountUnlinked}/>}
 
         {activeTab === 'assets' && <ConnectedAssets snapshots={history.snapshots} section="investments" accounts={bankAccounts} investments={visibleProviderInvestments} creditCards={[]} isPrivateMode={isPrivateMode} />}
 
