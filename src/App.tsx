@@ -508,7 +508,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         {history.error && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{history.error} Os dados consultados continuam visíveis, mas esta atualização pode não ter sido salva no histórico.</p>}
         {showDataSkeleton ? <DataSkeleton label={menuTransitioning ? 'Abrindo seção…' : 'Carregando seus dados financeiros…'} variant={activeTab === 'overview' ? 'overview' : activeTab === 'connections' ? 'connections' : activeTab === 'ledger' || activeTab === 'planning' ? 'ledger' : 'list'}/> : <div key={activeTab} className="menu-content space-y-6">
         {activeTab === 'learn' && <InvestmentAcademySection selicRateAnnual={realIndicators?.selic.metaAnnualPct} cdiRateAnnual={realIndicators?.cdi.annualizedPct}/>}
-        {activeTab === 'personal-budget' && <PersonalBudgetPanel privateMode={isPrivateMode} itemIds={pluggyItemIds}/>}
+        {activeTab === 'personal-budget' && <PersonalBudgetPanel privateMode={isPrivateMode} itemIds={pluggyItemIds} cards={creditCards} accounts={bankAccounts} onOpenCards={() => { setAccountsView('cards'); navigateToTab('accounts'); }}/>}
         {activeTab === 'planning' && <PlanningSection data={planning} onChange={setPlanning} transactions={classifiedTransactions} privateMode={isPrivateMode} history={history} controls={controlView} onConnections={() => navigateToTab('connections')} onLoans={() => navigateToTab('loans')}/>}
         {activeTab === 'overview' && <>
         <HomeShortcuts onNavigate={navigateToTab} onCards={() => { setAccountsView('cards'); navigateToTab('accounts'); }}/>
