@@ -121,3 +121,4 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
       </div>}
     </div>
   </section>;
+}
