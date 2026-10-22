@@ -17,6 +17,27 @@ const PLAN_ITEMS = [
   ])
 ];
 const PLAN_KEY='finpulse-personal-payments-v1';
+function ProgressRing({value,label,subLabel,tone='cyan'}:{value:number;label:string;subLabel:string;tone?:'cyan'|'emerald'}) {
+  const progress=Math.min(100,Math.max(0,value));
+  const circumference=2*Math.PI*48;
+  return <div className="flex flex-col items-center gap-2">
+    <div className="relative h-36 w-36" role="progressbar" aria-label={label} aria-valuenow={Math.round(progress)} aria-valuemin={0} aria-valuemax={100}>
+      <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90" aria-hidden="true">
+        <circle cx="60" cy="60" r="48" fill="none" stroke="currentColor" strokeWidth="9" className="text-slate-800"/>
+        <circle cx="60" cy="60" r="48" fill="none" stroke="currentColor" strokeWidth="9" strokeLinecap="round"
+          strokeDasharray={circumference} strokeDashoffset={circumference*(1-progress/100)}
+          className={`${tone==='emerald'?'text-emerald-400':'text-cyan-400'} transition-all duration-500 ease-out`}/>
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <strong className="text-2xl tabular-nums">{Math.round(progress)}%</strong>
+        <span className="text-[10px] text-slate-400">concluído</span>
+      </div>
+    </div>
+    <p className="text-center text-xs font-medium text-slate-200">{label}</p>
+    <p className="text-center text-[11px] text-slate-400">{subLabel}</p>
+  </div>;
+}
+
 
 export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards = [], accounts = [], onOpenCards, mode = 'cards' }: {
   privateMode?: boolean; itemIds?: string[]; cards?: any[]; accounts?: BankAccount[]; onOpenCards?: () => void; mode?: 'cards' | 'planning';
@@ -91,6 +112,12 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
   const neonDue = Math.max(0, 458.08 + newNeon - paidNeon);
   const debtTotal = tireDue + nubankDue + neonDue;
   const afterTire = available - Math.min(225, tireDue);
+  const monthItems=PLAN_ITEMS.filter(item=>item.month===planMonth);
+  const monthTotal=monthItems.reduce((sum,item)=>sum+item.amount,0);
+  const monthPaid=monthItems.filter(item=>checkedBills.includes(item.id)).reduce((sum,item)=>sum+item.amount,0);
+  const debtItems=PLAN_ITEMS.filter(item=>item.debt);
+  const debtInitial=debtItems.reduce((sum,item)=>sum+item.amount,0)+newNeon;
+  const debtPaid=debtItems.filter(item=>checkedBills.includes(item.id)).reduce((sum,item)=>sum+item.amount,0);
   const inputClass = 'mt-1 block w-full rounded-xl border border-slate-700 bg-slate-900/50 p-2.5 text-sm text-slate-100';
 
   return <section className="space-y-5 text-slate-100" aria-label={mode === 'planning' ? 'Planejamento pessoal' : 'Meus cartões'}>
@@ -176,6 +203,10 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
       </div>
       <div className="space-y-3 rounded-xl border border-white/[0.06] p-3">
         <div><h3 className="text-sm font-semibold">Calendário de pagamentos</h3><p className="mt-1 text-xs text-slate-400">Marque somente depois de pagar. As marcações ficam salvas neste navegador.</p></div>
+        <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-900/50 p-3">
+          <ProgressRing value={monthTotal?100*monthPaid/monthTotal:0} label="Contas do mês" subLabel={money(Math.max(0,monthTotal-monthPaid))+' pendentes'}/>
+          <ProgressRing value={debtInitial?100*debtPaid/debtInitial:100} label="Quitar dívidas" subLabel={money(Math.max(0,debtInitial-debtPaid))+' restantes'} tone="emerald"/>
+        </div>
         <label className="block text-xs text-slate-400">Mês
           <select value={planMonth} onChange={e=>setPlanMonth(e.target.value)} className={inputClass}>
             {PLAN_MONTHS.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
@@ -192,7 +223,7 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
         </div>
         <p className="text-xs leading-relaxed text-slate-500">Mercado e combustível são metas mensais separadas; não são contas quitadas. Novas compras Neon são adicionadas ao saldo estimado, sem duplicar a fatura conhecida. Juros e faturas futuras ainda não informadas não estão incluídos. Os campos de pagamentos parciais acima são estimativas separadas e não abatem esta lista; não registre o mesmo pagamento duas vezes.</p>
       </div>
-      <p className="text-xs text-amber-300">Não use limite do cartão como renda. Pagar parcialmente pode gerar juros. Este controle é uma simulação temporária: as alterações não são salvas e não efetuam pagamentos.</p>
+      <p className="text-xs text-amber-300">Não use limite do cartão como renda. Pagar parcialmente pode gerar juros. As marcações do calendário são salvas neste navegador, mas não são sincronizadas com sua conta e não efetuam pagamentos. Outros campos de simulação não são salvos.</p>
     </div>}
 
   </section>;
