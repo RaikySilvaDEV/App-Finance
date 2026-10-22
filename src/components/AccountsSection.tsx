@@ -69,7 +69,7 @@ export function AccountsSection({ accounts, cards, itemIds, privateMode, onRemov
       </div>
     </div>}
     {tab === 'cards' && <div id="finance-panel-cards" role="tabpanel" aria-labelledby="finance-tab-cards" className="space-y-5">
-      {cardTools}
+      {(!!cards.length || !!(cardTools)) && cardTools}
       {!!cards.length && <div className="space-y-3"><h3 className="px-1 text-xs font-semibold text-slate-300">Cartões conectados</h3><ConnectedAssets section="cards" accounts={accounts} investments={[]} creditCards={cards} isPrivateMode={privateMode}/></div>}
     </div>}
     {tab === 'bills' && <div id="finance-panel-bills" role="tabpanel" aria-labelledby="finance-tab-bills"><BankBills itemIds={itemIds} privateMode={privateMode}/></div>}

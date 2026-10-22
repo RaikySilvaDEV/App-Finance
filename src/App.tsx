@@ -508,8 +508,8 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         {history.error && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{history.error} Os dados consultados continuam visíveis, mas esta atualização pode não ter sido salva no histórico.</p>}
         {showDataSkeleton ? <DataSkeleton label={menuTransitioning ? 'Abrindo seção…' : 'Carregando seus dados financeiros…'} variant={activeTab === 'overview' ? 'overview' : activeTab === 'connections' ? 'connections' : activeTab === 'ledger' || activeTab === 'planning' ? 'ledger' : 'list'}/> : <div key={activeTab} className="menu-content space-y-6">
         {activeTab === 'learn' && <InvestmentAcademySection selicRateAnnual={realIndicators?.selic.metaAnnualPct} cdiRateAnnual={realIndicators?.cdi.annualizedPct}/>}
-        {activeTab === 'planning' && <PersonalBudgetPanel privateMode={isPrivateMode}/>}
-        {activeTab === 'planning' && <PlanningSection data={planning} onChange={setPlanning} transactions={classifiedTransactions} privateMode={isPrivateMode} history={history} controls={controlView} onConnections={() => navigateToTab('connections')} onLoans={() => navigateToTab('loans')}/>}
+        {activeTab === 'personal-budget' && <PersonalBudgetPanel mode="cards" privateMode={isPrivateMode} itemIds={pluggyItemIds} cards={creditCards} accounts={bankAccounts} onOpenCards={() => { setAccountsView('cards'); navigateToTab('accounts'); }}/>}
+        {activeTab === 'planning' && <><PersonalBudgetPanel mode="planning" privateMode={isPrivateMode} itemIds={pluggyItemIds}/><PlanningSection data={planning} onChange={setPlanning} transactions={classifiedTransactions} privateMode={isPrivateMode} history={history} controls={controlView} onConnections={() => navigateToTab('connections')} onLoans={() => navigateToTab('loans')}/></>}
         {activeTab === 'overview' && <>
         <HomeShortcuts onNavigate={navigateToTab} onCards={() => { setAccountsView('cards'); navigateToTab('accounts'); }}/>
         <MoneyAvailable accounts={bankAccounts} cards={creditCards} investments={providerInvestments} loans={loans} data={planning} privateMode={isPrivateMode}/>
@@ -528,7 +528,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
         </>}
 
-        {activeTab === 'accounts' && <AccountsSection cardTools={<ManualCardsPanel data={planning} onChange={setPlanning} privateMode={isPrivateMode}/>} initialTab={accountsView} manualTools={<>{manualError && <p role="alert" className="text-rose-300">{manualError}</p>}<StatementImport accounts={manualBankAccounts} onChanged={manualChanged} privateMode={isPrivateMode}/></>} accounts={bankAccounts} cards={creditCards} itemIds={pluggyItemIds} privateMode={isPrivateMode} onRemove={handleAccountUnlinked}/>}
+        {activeTab === 'accounts' && <AccountsSection cardTools={<ManualCardsPanel data={planning} onChange={setPlanning} privateMode={isPrivateMode} connectedCardCount={creditCards.length}/>} initialTab={accountsView} manualTools={<>{manualError && <p role="alert" className="text-rose-300">{manualError}</p>}<StatementImport accounts={manualBankAccounts} onChanged={manualChanged} privateMode={isPrivateMode}/></>} accounts={bankAccounts} cards={creditCards} itemIds={pluggyItemIds} privateMode={isPrivateMode} onRemove={handleAccountUnlinked}/>}
 
         {activeTab === 'assets' && <ConnectedAssets snapshots={history.snapshots} section="investments" accounts={bankAccounts} investments={visibleProviderInvestments} creditCards={[]} isPrivateMode={isPrivateMode} />}
 
