@@ -4,8 +4,8 @@ import { BankLogo, bankDisplayName } from './BankLogo';
 import type { BankAccount } from '../types/finance';
 
 const BRL = (n: number, currency = 'BRL') => n.toLocaleString('pt-BR', { style: 'currency', currency });
-export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards = [], accounts = [], onOpenCards }: {
-  privateMode?: boolean; itemIds?: string[]; cards?: any[]; accounts?: BankAccount[]; onOpenCards?: () => void;
+export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards = [], accounts = [], onOpenCards, mode = 'cards' }: {
+  privateMode?: boolean; itemIds?: string[]; cards?: any[]; accounts?: BankAccount[]; onOpenCards?: () => void; mode?: 'cards' | 'planning';
 }) {
   const [showPlan, setShowPlan] = useState(false);
   const [showBills, setShowBills] = useState(false);
@@ -51,13 +51,9 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
   const projected = estimatedIncome - estimatedFixed - market - 100 -
     novemberBills.reduce((sum: number, bill: any) => sum + Number(bill.totalAmount), 0);
 
-  return <section className="space-y-5 text-slate-100" aria-label="Meu dinheiro">
-    <header className="space-y-1">
-      <p className="text-xs font-medium uppercase tracking-widest text-slate-500">FinPulse</p>
-      <h2 className="text-2xl font-semibold tracking-tight">Meu dinheiro</h2>
-      <p className="text-sm text-slate-400">Seus cartões conectados e seu planejamento, sem misturar saldo com fatura.</p>
-    </header>
-
+  return <section className="space-y-5 text-slate-100" aria-label={mode === 'planning' ? 'Planejamento pessoal' : 'Meus cartões'}>
+    <header className="space-y-1"><p className="text-xs font-medium uppercase tracking-widest text-slate-500">FinPulse</p><h2 className="text-2xl font-semibold tracking-tight">{mode === 'planning' ? 'Planejamento pessoal' : 'Meus cartões'}</h2><p className="text-sm text-slate-400">{mode === 'planning' ? 'Organize despesas e previsões em um só lugar.' : 'Saldos reais dos cartões conectados, iguais aos da Visão geral.'}</p></header>
+    {mode === 'cards' && <>
     <article className="overview-card">
       <div className="overview-card-heading">
         <h2><CreditCard/>Cartões de crédito</h2>
@@ -103,6 +99,8 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
       </div>}
     </div>
 
+    </>}
+    {mode === 'planning' && <>
     <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025]">
       <button type="button" onClick={() => setShowPlan(v => !v)} aria-expanded={showPlan} className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left">
         <span className="flex items-center gap-3"><Wallet className="h-5 w-5 text-slate-400"/><span><span className="block text-sm font-semibold text-slate-200">Meu planejamento</span><span className="block pt-1 text-xs text-slate-500">Estimativas de novembro de 2026 · não são saldo bancário</span></span></span>
@@ -120,5 +118,6 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
         <div className="border-t border-white/[0.06] pt-3"><p className="text-xs text-slate-500">Resultado estimado de novembro</p><p className="mt-1 text-xl font-semibold">{billsData && !billsData.unavailable ? money(projected) : 'Previsão incompleta'}</p><p className="mt-1 text-xs leading-relaxed text-slate-500">Inclui salários, despesas fixas, mercado, meta de R$ 100 para a caixinha e faturas com vencimento em novembro. Não inclui ajuda não confirmada nem combustível previsto para dezembro. Verifique possíveis despesas já incluídas na fatura para evitar duplicidade.</p></div>
       </div>}
     </div>
+    </>}
   </section>;
 }
