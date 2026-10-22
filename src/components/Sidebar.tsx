@@ -1,6 +1,6 @@
 import React from 'react';
-import { Activity, ArrowLeftRight, BarChart3, BookOpen, Building2, BriefcaseBusiness, LayoutDashboard, X, HandCoins, Link2 } from 'lucide-react';
-export type MainTab = 'overview' | 'accounts' | 'assets' | 'ledger' | 'market' | 'portfolio' | 'loans' | 'connections' | 'planning' | 'learn';
+import { Activity, ArrowLeftRight, BarChart3, BookOpen, Building2, BriefcaseBusiness, LayoutDashboard, X, HandCoins, Link2, Wallet } from 'lucide-react';
+export type MainTab = 'overview' | 'accounts' | 'assets' | 'ledger' | 'market' | 'portfolio' | 'loans' | 'connections' | 'planning' | 'personal-budget' | 'learn';
 interface Props { open: boolean; activeTab: MainTab; connectedAccounts: number; onSelectTab: (tab: MainTab) => void; onClose: () => void; onConnect: () => void; onAcademy: () => void; onAdvisor: () => void; }
 const links: { id: MainTab; label: string; Icon: React.ComponentType<{className?: string}> }[] = [
   { id: 'overview', label: 'Visão geral', Icon: LayoutDashboard },
@@ -10,6 +10,7 @@ const links: { id: MainTab; label: string; Icon: React.ComponentType<{className?
   { id: 'loans', label: 'Empréstimos', Icon: HandCoins },
   { id: 'connections', label: 'Conexões', Icon: Link2 },
   { id: 'planning', label: 'Planejamento', Icon: BriefcaseBusiness },
+  { id: 'personal-budget', label: 'Meu dinheiro', Icon: Wallet },
   { id: 'market', label: 'Mercado', Icon: BarChart3 },
   { id: 'portfolio', label: 'Posições manuais', Icon: BriefcaseBusiness },
 ];
@@ -28,7 +29,7 @@ export const Sidebar: React.FC<Props> = ({ open, activeTab, connectedAccounts, o
     <aside className="workspace-sidebar sticky top-16 hidden h-[calc(100vh-64px)] w-56 shrink-0 border-r border-slate-800/80 bg-[#0c0c0f]/70 lg:block">{content}</aside>
     {open && <div className="fixed inset-0 z-50 lg:hidden"><button className="absolute inset-0 bg-black/70" aria-label="Fechar menu" onClick={onClose}/><aside className="absolute inset-y-0 left-0 w-[min(84vw,320px)] border-r border-slate-700 bg-[#0c0c0f] shadow-2xl">{content}</aside></div>}
     <nav aria-label="Navegação inferior" className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-700/80 bg-[#0c0c0f]/95 px-1 pt-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-[0_-12px_32px_rgba(0,0,0,0.35)] backdrop-blur-xl lg:hidden">
-      <div className="mx-auto grid max-w-xl grid-cols-5 gap-0.5">{links.filter((link) => link.id !== 'portfolio' && link.id !== 'connections' && link.id !== 'market' && link.id !== 'loans').map(({ id, label, Icon }) => <button key={id} onClick={() => chooseTab(id)} aria-current={activeTab === id ? 'page' : undefined} aria-label={label} className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-0.5 py-1.5 text-[10px] leading-tight transition-colors ${activeTab === id ? 'bg-cyan-400/10 font-semibold text-cyan-200' : 'text-slate-400 hover:bg-slate-800/80 hover:text-white'}`}><Icon className="h-5 w-5 shrink-0"/><span className="max-w-full truncate">{{ overview: 'Início', accounts: 'Contas', assets: 'Ativos', ledger: 'Extrato', market: 'Mercado', portfolio: 'Carteira', loans: 'Dívidas', connections: 'Conexões', planning: 'Planejar', learn: 'Aprender' }[id]}</span></button>)}</div>
+      <div className="mx-auto grid max-w-xl grid-cols-5 gap-0.5">{links.filter((link) => link.id !== 'portfolio' && link.id !== 'connections' && link.id !== 'market' && link.id !== 'loans' && link.id !== 'planning').map(({ id, label, Icon }) => <button key={id} onClick={() => chooseTab(id)} aria-current={activeTab === id ? 'page' : undefined} aria-label={label} className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-0.5 py-1.5 text-[10px] leading-tight transition-colors ${activeTab === id ? 'bg-cyan-400/10 font-semibold text-cyan-200' : 'text-slate-400 hover:bg-slate-800/80 hover:text-white'}`}><Icon className="h-5 w-5 shrink-0"/><span className="max-w-full truncate">{{ overview: 'Início', accounts: 'Contas', assets: 'Ativos', ledger: 'Extrato', market: 'Mercado', portfolio: 'Carteira', loans: 'Dívidas', connections: 'Conexões', planning: 'Planejar', 'personal-budget': 'Meu dinheiro', learn: 'Aprender' }[id]}</span></button>)}</div>
     </nav>
   </>;
 };
