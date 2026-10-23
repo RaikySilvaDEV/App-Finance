@@ -1,91 +1,165 @@
-import { SectionInfo } from './SectionInfo';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, CalendarDays, RefreshCw } from 'lucide-react';
-import { Asset, PortfolioHolding } from '../types/finance';
-interface HistoryPoint { timestamp: number; close: number; }
-interface HistoryResponse { points: HistoryPoint[]; currency?: string; source?: string; }
-interface Props { holdings: PortfolioHolding[]; isPrivateMode: boolean; assets: Asset[]; }
-export const GainsPerformanceCard: React.FC<Props> = ({ holdings, isPrivateMode, assets }) => {
-  const totalValue = holdings.reduce((sum, holding) => sum + holding.currentValue, 0);
-  const invested = holdings.reduce((sum, holding) => sum + holding.totalInvested, 0);
-  const pnl = totalValue - invested;
-  const pnlPct = invested > 0 ? pnl / invested * 100 : 0;
-  const [ticker, setTicker] = useState(assets[0]?.ticker || '');
+import { Activity, RefreshCw } from 'lucide-react';
+import type { Asset, PortfolioHolding } from '../types/finance';
+
+interface HistoryPoint { timestamp: number; close: number }
+interface HistoryResponse { points: HistoryPoint[]; currency?: string; source?: string }
+interface Series extends HistoryResponse { ticker: string }
+interface ConnectedInvestment { type?: string; code?: string | null; currencyCode?: string; balance?: number | null }
+const noConnectedInvestments: ConnectedInvestment[] = [];
+interface Props { connectedInvestments?: ConnectedInvestment[]; holdings: PortfolioHolding[]; isPrivateMode: boolean; assets: Asset[]; onManageHoldings?: () => void }
+const colors = ['#f12b58', '#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#fb923c', '#22d3ee', '#e879f9', '#a3e635'];
+const day = (stamp: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(stamp);
+const date = (value: string) => new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' }).format(new Date(value + 'T12:00:00Z'));
+const pct = (value: number) => `${value > 0 ? '+' : ''}${value.toLocaleString('pt-BR', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}%`;
+const money = (value: number, currency: string) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value);
+
+export const GainsPerformanceCard: React.FC<Props> = ({ holdings, isPrivateMode, assets, onManageHoldings, connectedInvestments = noConnectedInvestments }) => {
+  const positions = useMemo(() => {
+    const rows = new Map<string, { quantity: number; invested: number }>();
+    for (const holding of holdings) {
+      const ticker = holding.ticker.trim().toUpperCase();
+      if (!/^[A-Z0-9.^-]{1,15}$/.test(ticker) || !(holding.quantity > 0)) continue;
+      const row = rows.get(ticker) || { quantity: 0, invested: 0 };
+      row.quantity += holding.quantity;
+      row.invested += Number.isFinite(holding.totalInvested) ? holding.totalInvested : holding.quantity * holding.averagePrice;
+      rows.set(ticker, row);
+    }
+    return rows;
+  }, [holdings]);
+  const ownedTickers = useMemo(() => [...new Set([...positions.keys(), ...connectedInvestments.flatMap(asset => {
+    // Only use an explicit exchange code; product names and fixed income are not tickers.
+    const code = typeof asset.code === 'string' ? asset.code.trim().toUpperCase().replace(/\.SA$/, '') : '';
+    return ['EQUITY', 'ETF'].includes(asset.type || '') && asset.currencyCode === 'BRL' && Number(asset.balance) > 0 && /^[A-Z]{4,5}\d{1,2}$/.test(code) ? [code] : [];
+  })])].sort(), [positions, connectedInvestments]);
+  const [scope, setScope] = useState<'positions' | 'market'>('positions');
   const [period, setPeriod] = useState<'week' | 'month'>('month');
-  const [history, setHistory] = useState<HistoryPoint[]>([]);
-  const [source, setSource] = useState('');
-  const [currencyCode, setCurrencyCode] = useState('BRL');
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [mode, setMode] = useState<'period' | 'cost'>('period');
+  const [series, setSeries] = useState<Series[]>([]);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [hidden, setHidden] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ left: 8, top: 8 });
-  useEffect(() => setHoveredIndex(null), [ticker, period, history]);
-  useEffect(() => { if (assets.length && !assets.some(asset => asset.ticker === ticker)) setTicker(assets[0].ticker); }, [assets, ticker]);
+  const [refresh, setRefresh] = useState(0);
+  const [hoveredDay, setHoveredDay] = useState<string | null>(null);
+  const [anchor, setAnchor] = useState({ left: 8, top: 8 });
+  const own = scope === 'positions' && ownedTickers.length > 0;
+  const tickerKey = useMemo(() => [...new Set(own ? ownedTickers : assets.map(asset => asset.ticker.trim().toUpperCase()).filter(ticker => /^[A-Z0-9.^-]{1,15}$/.test(ticker)))].sort().join(','), [own, ownedTickers, assets]);
   useEffect(() => {
-    if (!ticker) { setHistory([]); return; }
     const controller = new AbortController();
-    setLoading(true); setError(null);
-    fetch(`/api/market/history/${encodeURIComponent(ticker)}`, { signal: controller.signal })
-      .then(async response => { const data: HistoryResponse & { error?: string } = await response.json(); if (!response.ok) throw new Error(data.error || 'Histórico indisponível.'); setCurrencyCode(data.currency || 'BRL'); setSource(data.source || 'Fonte não informada'); return data.points; })
-      .then(points => setHistory(points || []))
-      .catch(reason => { if (reason.name !== 'AbortError') { setHistory([]); setError(reason.message || 'Falha ao obter histórico.'); } })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    const tickers = tickerKey ? tickerKey.split(',') : [];
+    setSeries([]); setErrors([]); setHidden([]); setHoveredDay(null);
+    if (!tickers.length) { setLoading(false); return () => controller.abort(); }
+    setLoading(true);
+    async function load() {
+      let next = 0;
+      const results: Series[] = [];
+      const failed: string[] = [];
+      // Bound concurrent requests even when a portfolio contains many symbols.
+      await Promise.all(Array.from({ length: Math.min(4, tickers.length) }, async () => {
+        while (next < tickers.length && !controller.signal.aborted) {
+          const ticker = tickers[next++];
+          try {
+            const response = await fetch(`/api/market/history/${encodeURIComponent(ticker)}`, { signal: controller.signal });
+            if (!response.headers.get('content-type')?.includes('application/json')) throw new Error();
+            const data: HistoryResponse = await response.json();
+            if (!response.ok || !Array.isArray(data.points)) throw new Error();
+            const points = data.points.filter(point => Number.isFinite(point.timestamp) && Number.isFinite(point.close) && point.close > 0).sort((a, b) => a.timestamp - b.timestamp);
+            if (!points.length) throw new Error();
+            results.push({ ticker, currency: data.currency || 'BRL', source: data.source || 'Fonte não informada', points });
+          } catch { if (!controller.signal.aborted) failed.push(ticker); }
+        }
+      }));
+      if (!controller.signal.aborted) { setSeries(results.sort((a, b) => a.ticker.localeCompare(b.ticker))); setErrors(failed.sort()); setLoading(false); }
+    }
+    void load();
     return () => controller.abort();
-  }, [ticker, refreshKey]);
-  const visiblePoints = useMemo(() => period === 'week' ? history.slice(-6) : history, [history, period]);
-  const width = 800, height = 270, padX = 38, padY = 26;
-  const prices = visiblePoints.map(point => point.close);
-  const minimum = Math.min(...prices), maximum = Math.max(...prices);
-  const spread = maximum - minimum || Math.max(maximum * 0.01, 1);
-  const x = (index: number) => padX + index * (width - padX * 2) / Math.max(visiblePoints.length - 1, 1);
-  function moveTooltip(event: React.PointerEvent<SVGSVGElement>) {
-    const svgBounds = event.currentTarget.getBoundingClientRect();
-    const containerBounds = event.currentTarget.parentElement!.getBoundingClientRect();
-    const position = (event.clientX - svgBounds.left) / svgBounds.width * width;
-    const index = Math.max(0, Math.min(visiblePoints.length - 1, Math.round((position - padX) / (width - 2 * padX) * (visiblePoints.length - 1))));
-    if (!visiblePoints[index]) return;
-    setHoveredIndex(index);
-    const pointX = svgBounds.left - containerBounds.left + x(index) / width * svgBounds.width;
-    const pointY = svgBounds.top - containerBounds.top + y(visiblePoints[index].close) / height * svgBounds.height;
-    setTooltipPosition({ left: Math.max(8, Math.min(containerBounds.width - 160, pointX - 65)), top: Math.max(8, Math.min(containerBounds.height - 65, pointY >= 70 ? pointY - 65 : pointY + 12)) });
+  }, [tickerKey, refresh]);
+  const effectiveMode = own && positions.size > 0 ? mode : 'period';
+  const comparison = useMemo(() => {
+    if (!series.length) return [];
+    const lastTime = Math.max(...series.map(row => row.points.at(-1)!.timestamp));
+    const periodStart = period === 'week' ? lastTime - 7 * 86400000 : -Infinity;
+    const starts = series.map(row => row.points.find(point => point.timestamp >= periodStart)?.timestamp).filter((stamp): stamp is number => stamp !== undefined);
+    const startDay = starts.length ? day(Math.max(...starts)) : '';
+    return series.map((row, index) => {
+      const points = row.points.filter(point => day(point.timestamp) >= startDay);
+      const position = positions.get(row.ticker);
+      const average = position && position.quantity > 0 && position.invested > 0 && row.currency === 'BRL' ? position.invested / position.quantity : null;
+      const base = effectiveMode === 'cost' ? average : points[0]?.close;
+      return { ...row, color: colors[index % colors.length], average, position, points, chart: points.map(point => ({ ...point, day: day(point.timestamp), value: base ? (point.close / base - 1) * 100 : null })) };
+    });
+  }, [series, period, positions, effectiveMode]);
+  const visible = comparison.filter(row => !hidden.includes(row.ticker) && row.chart.some(point => point.value !== null));
+  const days = [...new Set(visible.flatMap(row => row.chart.map(point => point.day)))].sort();
+  const values = visible.flatMap(row => row.chart.flatMap(point => point.value === null ? [] : [point.value]));
+  const minimum = Math.min(0, ...values), maximum = Math.max(0, ...values);
+  const spread = maximum - minimum || 1;
+  const low = minimum - spread * .12, high = maximum + spread * .12;
+  const width = 800, height = 290, padX = 48, padY = 26;
+  const firstDay = days[0] ? Date.parse(days[0]) : 0;
+  const lastDay = days.at(-1) ? Date.parse(days.at(-1)!) : firstDay;
+  const x = (value: string) => padX + (Date.parse(value) - firstDay) / (lastDay - firstDay || 1) * (width - 2 * padX);
+  const y = (value: number) => height - padY - (value - low) / (high - low) * (height - 2 * padY);
+  useEffect(() => setHoveredDay(null), [tickerKey, period, effectiveMode, hidden, refresh]);
+  function pointAt(selectedDay: string) {
+    return visible.flatMap(row => {
+      const point = row.chart.find(point => point.day === selectedDay);
+      return point && point.value !== null ? [{ row, point }] : [];
+    });
   }
-  const y = (price: number) => height - padY - ((price - minimum) / spread) * (height - padY * 2);
-  const line = visiblePoints.map((point, index) => `${x(index)},${y(point.close)}`).join(' ');
-  const area = visiblePoints.length ? `M ${x(0)},${height-padY} ${visiblePoints.map((point,index) => `L ${x(index)},${y(point.close)}`).join(' ')} L ${x(visiblePoints.length-1)},${height-padY} Z` : '';
-  const latest = visiblePoints.at(-1)?.close;
-  const first = visiblePoints[0]?.close;
-  const change = latest !== undefined && first ? (latest / first - 1) * 100 : null;
-  const currency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: currencyCode }).format(value);
-  const formatDate = (timestamp: number) => new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(timestamp));
-  return <section className="overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-b from-slate-900/90 to-[#101012] p-4 shadow-2xl sm:p-6">
-    <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-800/80 pb-5">
-      <div><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400"><Activity className="h-4 w-4 text-emerald-400"/>Posições manuais · estimativa</div>
-        <div className="mt-2 flex flex-wrap items-baseline gap-3"><h2 className="text-3xl font-extrabold text-white">{isPrivateMode ? 'R$ ••••••' : currency(totalValue)}</h2><span className={`text-sm font-semibold ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{isPrivateMode ? '••••' : `${pnl >= 0 ? '+' : ''}${currency(pnl)} (${pnlPct.toFixed(2)}%)`}</span></div>
-        <SectionInfo title="Sobre os valores">Posições manuais: valor estimado pelo último preço disponível e preço médio cadastrado.</SectionInfo>
+  function move(event: React.PointerEvent<SVGSVGElement>) {
+    if (!days.length) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const container = event.currentTarget.parentElement!.getBoundingClientRect();
+    const position = (event.clientX - bounds.left) / bounds.width * width;
+    const selectedDay = days.reduce((best, value) => Math.abs(x(value) - position) < Math.abs(x(best) - position) ? value : best, days[0]);
+    const points = pointAt(selectedDay);
+    const pointerY = (event.clientY - bounds.top) / bounds.height * height;
+    const nearest = points.reduce<(typeof points)[number] | null>((best, value) => !best || Math.abs(y(value.point.value!) - pointerY) < Math.abs(y(best.point.value!) - pointerY) ? value : best, null);
+    const pointX = bounds.left - container.left + x(selectedDay) / width * bounds.width;
+    const pointY = nearest ? bounds.top - container.top + y(nearest.point.value!) / height * bounds.height : 10;
+    setHoveredDay(selectedDay);
+    setAnchor({ left: Math.max(8, Math.min(container.width - Math.min(270, container.width - 16) - 8, pointX - 120)), top: Math.max(8, Math.min(container.height - 180, pointY - 120)) });
+  }
+  const maskedPct = (value: number) => isPrivateMode ? '••••' : pct(value);
+  const selectedPoints = hoveredDay ? pointAt(hoveredDay) : [];
+  const control = 'min-h-10 rounded-lg border border-white/10 bg-[#101012] px-3 text-xs text-slate-300';
+  return <section className="space-y-4" aria-label="Comparação das cotações">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><h2 className="flex items-center gap-2 text-sm font-semibold text-white"><Activity aria-hidden="true" className="h-4 w-4 text-rose-400"/>Comparar ativos</h2><p className="mt-1 text-[11px] text-slate-500">{own ? 'Seus ativos com código de bolsa' : 'Cotações de mercado · não representam sua carteira'} · dados diários</p></div>
+      <div className="flex flex-wrap gap-2">
+        {!!ownedTickers.length && <select aria-label="Ativos para comparar" value={scope} onChange={event => setScope(event.target.value as typeof scope)} className={control}><option value="positions">Meus ativos</option><option value="market">Mercado</option></select>}
+        <select aria-label="Período das cotações" value={period} onChange={event => setPeriod(event.target.value as typeof period)} className={control}><option value="week">1 semana</option><option value="month">1 mês</option></select>
+        {own && positions.size > 0 && <select aria-label="Base de comparação" value={mode} onChange={event => setMode(event.target.value as typeof mode)} className={control}><option value="period">Variação no período</option><option value="cost">Sobre meu preço médio</option></select>}
+        <button type="button" onClick={() => setRefresh(value => value + 1)} disabled={loading || !tickerKey} className={`${control} disabled:opacity-50`} aria-label="Atualizar cotações" title="Atualizar cotações"><RefreshCw className={`h-4 w-4 ${loading ? 'motion-safe:animate-spin' : ''}`}/></button>
       </div>
-      <div className="flex items-center gap-2"><select aria-label="Ativo do gráfico" value={ticker} onChange={event => setTicker(event.target.value)} className="max-w-[180px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">{assets.map(asset => <option key={asset.ticker} value={asset.ticker}>{asset.ticker}</option>)}</select>
-        <button onClick={() => setRefreshKey(value => value + 1)} disabled={loading || !ticker} className="rounded-lg border border-slate-700 p-2 text-slate-300 hover:bg-slate-800 disabled:opacity-50" title="Atualizar histórico" aria-label="Atualizar histórico"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}/></button></div>
     </div>
-    <div className="pt-5"><div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-white">Histórico de cotação · {ticker || '—'}</h3><SectionInfo title="Sobre o gráfico">Fechamentos diários de mercado. Fonte: {source || 'consultando…'}. Não representa o patrimônio histórico da carteira.</SectionInfo></div>
-      <div className="flex rounded-lg border border-slate-800 bg-slate-950 p-1">{(['week','month'] as const).map(value => <button key={value} onClick={() => setPeriod(value)} className={`rounded-md px-3 py-1.5 text-xs ${period === value ? 'bg-cyan-400 font-bold text-slate-950' : 'text-slate-400'}`}>{value === 'week' ? <><CalendarDays className="mr-1 inline h-3 w-3"/>1 semana</> : '1 mês'}</button>)}</div></div>
-      <div className="relative h-[240px] rounded-xl border border-slate-800/70 bg-slate-950/60 p-2 sm:h-[300px]">
-        {loading && <div className="absolute inset-0 z-10 grid place-items-center rounded-xl bg-slate-950/70 text-xs text-slate-400">Carregando histórico…</div>}
-        {error && <div role="status" className="absolute inset-0 z-10 grid place-items-center rounded-xl p-6 text-center text-sm text-slate-400">{error}</div>}
-        {!loading && !error && !visiblePoints.length && <div className="absolute inset-0 grid place-items-center p-6 text-center text-sm text-slate-400">{assets.length ? 'Sem histórico para este ativo.' : 'Cotações indisponíveis no momento.'}</div>}
-        {!!visiblePoints.length && <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full touch-pan-y" preserveAspectRatio="none" role="img" aria-label={`Histórico de cotação de ${ticker}`} onPointerMove={moveTooltip} onPointerDown={moveTooltip} onPointerLeave={(event) => { if (event.pointerType === 'mouse') setHoveredIndex(null); }}>
-          <defs><linearGradient id="marketChartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f12b58" stopOpacity=".28"/><stop offset="100%" stopColor="#f12b58" stopOpacity="0"/></linearGradient></defs>
-          {[0.2,0.4,0.6,0.8].map(value => <line key={value} x1={padX} x2={width-padX} y1={padY+(height-2*padY)*value} y2={padY+(height-2*padY)*value} stroke="#242427" strokeDasharray="4 5"/>)}
-          <path d={area} fill="url(#marketChartFill)"/><polyline points={line} fill="none" stroke="#f12b58" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>
-          {visiblePoints.map((point,index) => <circle key={point.timestamp} cx={x(index)} cy={y(point.close)} r={index === visiblePoints.length-1 ? 4 : 2.2} fill="#f12b58"><title>{formatDate(point.timestamp)} · {currency(point.close)}</title></circle>)}
-          {hoveredIndex !== null && visiblePoints[hoveredIndex] && <g pointerEvents="none"><line x1={x(hoveredIndex)} x2={x(hoveredIndex)} y1={padY} y2={height-padY} stroke="#929297" strokeDasharray="4 4"/><circle cx={x(hoveredIndex)} cy={y(visiblePoints[hoveredIndex].close)} r="5" fill="#f12b58" stroke="#0b0b0e" strokeWidth="2"/></g>}
-          {visiblePoints.filter((_,index) => index===0 || index===visiblePoints.length-1 || index===Math.floor(visiblePoints.length/2)).map(point => <text key={`label-${point.timestamp}`} x={x(visiblePoints.indexOf(point))} y={height-5} fill="#929297" fontSize="11" textAnchor="middle">{formatDate(point.timestamp)}</text>)}
-        </svg>}
-        {hoveredIndex !== null && visiblePoints[hoveredIndex] && !loading && !error && <div role="tooltip" className="pointer-events-none absolute z-20 min-w-32 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-xs shadow-xl" style={tooltipPosition}><p className="text-slate-400">{new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Sao_Paulo' }).format(new Date(visiblePoints[hoveredIndex].timestamp))}</p><p className="mt-1 font-semibold text-white">{currency(visiblePoints[hoveredIndex].close)}</p></div>}
-      </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400"><span>{visiblePoints.length ? `${visiblePoints.length} pregões · ${formatDate(visiblePoints[0].timestamp)} a ${formatDate(visiblePoints.at(-1)!.timestamp)}` : 'Sem série disponível'}</span><span className={change !== null && change >= 0 ? 'font-semibold text-emerald-400' : 'font-semibold text-rose-400'}>{change === null ? '—' : `${change >= 0 ? '+' : ''}${change.toFixed(2)}% no período`}</span></div>
+    {!own && onManageHoldings && <p className="text-xs text-slate-400">Cadastre quantidade e preço médio para acompanhar seu ganho ou perda. <button type="button" onClick={onManageHoldings} className="text-rose-300 hover:underline">Cadastrar posição →</button></p>}
+    <div className="relative h-[290px] min-w-0 rounded-xl border border-white/[0.06] bg-[#0b0b0d] p-2 sm:h-[350px]" aria-busy={loading}>
+      {loading ? <div role="status" className="absolute inset-0 grid place-items-center text-xs text-slate-400">Carregando as cotações…</div> : !days.length ? <div role="status" className="absolute inset-0 grid place-items-center p-5 text-center text-sm text-slate-500">{!tickerKey ? 'Nenhum ativo com cotação para comparar.' : hidden.length ? 'Selecione um ativo na legenda abaixo.' : 'Histórico indisponível para os ativos selecionados.'}</div> : <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-full w-full touch-pan-y" role="img" tabIndex={0} aria-label={`Comparação percentual de ${visible.map(row => row.ticker).join(', ')}. Use as setas para consultar as datas.`} onPointerMove={move} onPointerDown={move} onPointerLeave={event => { if (event.pointerType === 'mouse') setHoveredDay(null); }} onBlur={() => setHoveredDay(null)} onKeyDown={event => {
+        if (!['ArrowLeft', 'ArrowRight', 'Escape'].includes(event.key)) return;
+        event.preventDefault();
+        if (event.key === 'Escape') { setHoveredDay(null); return; }
+        const current = hoveredDay ? days.indexOf(hoveredDay) : days.length - 1;
+        setHoveredDay(days[Math.max(0, Math.min(days.length - 1, current + (event.key === 'ArrowLeft' ? -1 : 1)))]);
+        setAnchor({ left: 52, top: 12 });
+      }}>
+        {[0, .25, .5, .75, 1].map(part => { const value = low + part * (high - low); return <g key={part}><line x1={padX} x2={width - padX} y1={y(value)} y2={y(value)} stroke="#202023" strokeDasharray="3 5"/><text x={padX - 6} y={y(value) + 4} fill="#71717a" fontSize="10" textAnchor="end">{isPrivateMode ? '••' : value.toFixed(1) + '%'}</text></g>; })}
+        <line x1={padX} x2={width - padX} y1={y(0)} y2={y(0)} stroke="#71717a" strokeDasharray="5 4"/>
+        {visible.map(row => <g key={row.ticker}><polyline points={row.chart.filter(point => point.value !== null).map(point => `${x(point.day)},${y(point.value!)}`).join(' ')} fill="none" stroke={row.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>{row.chart.filter(point => point.value !== null).map(point => <circle key={point.timestamp} cx={x(point.day)} cy={y(point.value!)} r={point.day === hoveredDay ? 4 : 1.8} fill={row.color}><title>{row.ticker} · {date(point.day)} · {isPrivateMode ? '••••' : money(point.close, row.currency || 'BRL')} · {maskedPct(point.value!)}</title></circle>)}</g>)}
+        {hoveredDay && <line x1={x(hoveredDay)} x2={x(hoveredDay)} y1={padY} y2={height - padY} stroke="#929297" strokeDasharray="4 4"/>}
+        {[...new Set([days[0], days[Math.floor(days.length / 2)], days.at(-1)!])].map(value => <text key={value} x={x(value)} y={height - 4} fill="#929297" fontSize="10" textAnchor="middle">{date(value)}</text>)}
+      </svg>}
+      {!!selectedPoints.length && !loading && <div role="tooltip" className="pointer-events-none absolute z-20 max-h-44 w-[min(270px,calc(100%-16px))] overflow-hidden rounded-lg border border-white/15 bg-[#18181d] px-3 py-2 text-[11px] shadow-xl" style={anchor}><p className="mb-2 text-slate-400">{date(hoveredDay!)} · {hoveredDay!.slice(0, 4)}</p>{selectedPoints.slice(0, 5).map(({ row, point }) => <div key={row.ticker} className="flex items-center justify-between gap-3 py-0.5"><span style={{ color: row.color }}>{row.ticker}</span><span className="tabular-nums text-slate-200">{isPrivateMode ? '••••' : money(point.close, row.currency || 'BRL')} <span className={point.value! < 0 ? 'text-rose-300' : 'text-emerald-300'}>{maskedPct(point.value!)}</span></span></div>)}{selectedPoints.length > 5 && <p className="mt-1 text-slate-400">+{selectedPoints.length - 5} ativos nos detalhes abaixo</p>}</div>}
     </div>
+    {!!comparison.length && <div className="flex flex-wrap gap-2" aria-label="Ativos visíveis no gráfico">{comparison.map(row => <button type="button" key={row.ticker} onClick={() => setHidden(old => old.includes(row.ticker) ? old.filter(ticker => ticker !== row.ticker) : [...old, row.ticker])} aria-pressed={!hidden.includes(row.ticker)} className={`inline-flex min-h-10 items-center gap-2 rounded-lg border border-white/[0.07] px-3 text-xs ${hidden.includes(row.ticker) ? 'text-slate-600' : 'text-slate-300'}`}><span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ background: row.color }}/>{row.ticker}<span className={`tabular-nums ${hidden.includes(row.ticker) || row.chart.at(-1)?.value == null ? '' : row.chart.at(-1)!.value! < 0 ? 'text-rose-300' : 'text-emerald-300'}`}>{row.chart.at(-1)?.value == null ? '—' : maskedPct(row.chart.at(-1)!.value!)}</span></button>)}</div>}
+    {effectiveMode === 'cost' && comparison.some(row => !row.average) && <p className="text-xs text-slate-400">Ativos sem preço médio compatível não entram nesta comparação. Use “Variação no período” para vê-los.</p>}
+    {!!errors.length && <p role="status" className="text-xs text-amber-200">Sem histórico: {errors.join(', ')}. Esses ativos não entram no gráfico.</p>}
+    <p className="text-[11px] leading-relaxed text-slate-500">{effectiveMode === 'cost' ? 'Posições manuais com custo conhecido: 0% representa seu preço médio atual cadastrado. Resultado bruto, sem taxas, impostos ou proventos.' : 'Cada linha parte de 0% no primeiro ponto disponível da janela comparada. A variação não representa seu lucro pessoal.'} Renda fixa sem cotação de bolsa continua em Ativos. Dados diários podem estar atrasados; não indicam o momento certo de comprar ou vender.</p>
+    {!!comparison.length && <details className="text-xs text-slate-500"><summary className="min-h-10 cursor-pointer py-2">Preços, resultados e fontes</summary><p className="mb-3 max-w-3xl leading-relaxed">O resultado sobre o custo usa a quantidade e o preço médio atuais das posições manuais. A linha histórica não reconstrói compras, vendas ou aportes. Ativos conectados sem custo cadastrado aparecem somente na variação de mercado.</p><div className="overflow-x-auto rounded-xl border border-white/[0.07]"><table className="w-full text-left text-xs"><caption className="sr-only">Últimos preços diários e resultado bruto das posições manuais cadastradas</caption><thead className="border-b border-white/[0.07] text-slate-400"><tr>{['Ativo', 'Último preço diário', 'Variação no período', 'Resultado da posição manual', 'Data / fonte'].map(label => <th key={label} className="whitespace-nowrap px-4 py-3 font-medium">{label}</th>)}</tr></thead><tbody>{comparison.map(row => {
+      const latest = row.points.at(-1), first = row.points[0];
+      const result = latest && row.average && row.position ? latest.close * row.position.quantity - row.position.invested : null;
+      return <tr key={row.ticker} className="border-b border-white/[0.04]"><th className="px-4 py-3 font-medium text-slate-300">{row.ticker}</th><td className="whitespace-nowrap px-4 py-3 tabular-nums">{latest ? isPrivateMode ? '••••' : money(latest.close, row.currency || 'BRL') : '—'}</td><td className="whitespace-nowrap px-4 py-3">{latest && first ? maskedPct((latest.close / first.close - 1) * 100) : '—'}</td><td className={`whitespace-nowrap px-4 py-3 ${result == null ? '' : result < 0 ? 'text-rose-300' : 'text-emerald-300'}`}>{result == null ? 'Sem preço médio compatível' : isPrivateMode ? '••••' : `${money(result, row.currency || 'BRL')} (${pct((latest!.close / row.average! - 1) * 100)})`}</td><td className="whitespace-nowrap px-4 py-3">{latest ? date(day(latest.timestamp)) : '—'} · {row.source}</td></tr>;
+    })}</tbody></table></div></details>}
   </section>;
 };
-
-

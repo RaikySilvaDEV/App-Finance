@@ -530,6 +530,8 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
           <summary className="flex cursor-pointer items-center justify-between gap-3 p-5 text-sm font-medium text-slate-300">Cotações do mercado <span className="text-xs font-normal text-slate-500">Abrir gráfico +</span></summary>
           <div className="px-4 pb-4"><GainsPerformanceCard
             holdings={holdings}
+            connectedInvestments={providerInvestments}
+            onManageHoldings={() => navigateToTab('portfolio')}
             isPrivateMode={isPrivateMode}
             assets={assets}
           /></div>
