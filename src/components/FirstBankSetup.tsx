@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Building2, ShieldCheck } from 'lucide-react';
+import { Building2, ChevronRight, FileUp, CalendarDays, ShieldCheck } from 'lucide-react';
 
-type ConnectionAccess = { directConnection: boolean; personalImport: boolean };
+type ConnectionAccess = { configured: boolean; directConnection: boolean; personalImport: boolean };
 
 export function FirstBankSetup({ onConnect, onManual, onPlanning }: {
   onConnect: () => void;
@@ -23,21 +23,36 @@ export function FirstBankSetup({ onConnect, onManual, onPlanning }: {
       .catch(() => { if (!controller.signal.aborted) setError(true); });
     return () => controller.abort();
   }, [attempt]);
-  const available = access?.directConnection || access?.personalImport;
-  return <section aria-labelledby="first-bank-heading" className="mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-[#101013] p-6 sm:p-10">
-    <Building2 aria-hidden="true" className="h-8 w-8 text-rose-400"/>
-    <h2 id="first-bank-heading" className="mt-5 text-xl font-semibold text-white">Seu dinheiro, em um só lugar</h2>
-    <p className="mt-3 text-sm leading-relaxed text-slate-400">Conecte seu primeiro banco para acompanhar contas, cartões e investimentos na sua conta FinPulse.</p>
-    {available && <ol className="mt-6 grid gap-3 text-sm text-slate-300 sm:grid-cols-3"><li>1. Escolha seu banco</li><li>2. Autorize o acesso</li><li>3. Acompanhe seus dados</li></ol>}
-    {!access && !error && <p role="status" className="mt-6 text-sm text-slate-400">Verificando a conexão de bancos…</p>}
-    {error && <div role="alert" className="mt-6 text-sm text-amber-200">Não foi possível consultar a conexão de bancos. <button onClick={() => setAttempt(value => value + 1)} className="underline">Tentar novamente</button></div>}
-    {access && !available && <p className="mt-6 text-sm leading-relaxed text-slate-400">A conexão automática aguarda liberação pelo responsável. Você já pode cadastrar contas, importar extratos e organizar seu planejamento aqui.</p>}
-    {access?.personalImport && !access.directConnection && <p className="mt-4 text-xs leading-relaxed text-slate-500">No uso pessoal, a autorização do banco é feita no Meu Pluggy e o vínculo dos dados é concluído aqui.</p>}
-    <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-      {available && <button onClick={onConnect} className="rounded-lg bg-rose-400 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-rose-300">{access?.directConnection ? 'Conectar meu banco' : 'Vincular meus bancos'}</button>}
-      <button onClick={onManual} className="rounded-lg border border-white/10 px-5 py-3 text-sm text-slate-200 hover:bg-white/5">Cadastrar conta manual</button>
-      <button onClick={onPlanning} className="px-3 py-3 text-sm text-slate-400 hover:text-white">Começar pelo planejamento</button>
+  const available = Boolean(access?.configured && (access.directConnection || access.personalImport));
+  const actionClass = 'group flex min-h-24 w-full min-w-0 items-center gap-4 rounded-xl border border-white/[0.07] bg-[#0e0e10] p-4 text-left transition-colors hover:border-white/20 hover:bg-white/[0.025] sm:p-5';
+  return <section aria-labelledby="first-bank-heading" className="space-y-5">
+    <header>
+      <h2 id="first-bank-heading" className="text-base font-semibold tracking-tight text-white">Comece por aqui</h2>
+      <p className="mt-1.5 text-xs leading-relaxed text-slate-400">Escolha como adicionar suas informações ao FinPulse.</p>
+    </header>
+    <div className={`grid gap-3 ${available ? 'xl:grid-cols-3' : 'md:grid-cols-2'}`}>
+      {available && <button type="button" onClick={onConnect} className={actionClass}>
+        <Building2 aria-hidden="true" className="h-5 w-5 shrink-0 text-rose-400"/>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-200">{access?.directConnection ? 'Conectar banco' : 'Vincular Meu Pluggy'}</span><span className="mt-1.5 block text-xs leading-relaxed text-slate-500">{access?.directConnection ? 'Autorize e acompanhe suas contas.' : 'Traga suas conexões pessoais.'}</span></span>
+        <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-600 group-hover:text-rose-300"/>
+      </button>}
+      <button type="button" onClick={onManual} className={actionClass}>
+        <FileUp aria-hidden="true" className="h-5 w-5 shrink-0 text-rose-400"/>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-200">Contas e extratos</span><span className="mt-1.5 block text-xs leading-relaxed text-slate-500">Cadastre sua conta e importe OFX ou CSV.</span></span>
+        <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-600 group-hover:text-rose-300"/>
+      </button>
+      <button type="button" onClick={onPlanning} className={actionClass}>
+        <CalendarDays aria-hidden="true" className="h-5 w-5 shrink-0 text-rose-400"/>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-medium text-slate-200">Meu planejamento</span><span className="mt-1.5 block text-xs leading-relaxed text-slate-500">Organize contas, orçamento e metas.</span></span>
+        <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-600 group-hover:text-rose-300"/>
+      </button>
     </div>
-    <p className="mt-6 flex items-start gap-2 text-xs leading-relaxed text-slate-500"><ShieldCheck aria-hidden="true" className="h-4 w-4 shrink-0"/>A conexão consulta dados. Nenhum pagamento é realizado por esse fluxo.</p>
+    {!access && !error && <p role="status" className="text-xs text-slate-500">Consultando conexão bancária…</p>}
+    {error && <p role="alert" className="text-xs leading-relaxed text-slate-400">Não foi possível consultar a conexão bancária. <button type="button" onClick={() => setAttempt(value => value + 1)} className="text-rose-300 underline underline-offset-4">Tentar novamente</button></p>}
+    {access && (!available || !access.directConnection) && <details className="rounded-xl border border-white/[0.07] px-4 text-xs text-slate-500">
+      <summary className="cursor-pointer py-4 text-slate-400">{available ? 'Sobre a conexão pelo Meu Pluggy' : 'Conexão automática em preparação'}<span className="ml-2 text-slate-600">· Saiba mais</span></summary>
+      <p className="max-w-2xl pb-4 leading-relaxed">{available ? 'Autorize seus bancos no Meu Pluggy e conclua o vínculo aqui. As atualizações bancárias são feitas na plataforma deles.' : 'A conexão de bancos aguarda liberação pelo responsável. Enquanto isso, você pode cadastrar contas, importar extratos e planejar seus pagamentos.'}</p>
+    </details>}
+    <p className="flex items-center gap-2 text-[11px] text-slate-500"><ShieldCheck aria-hidden="true" className="h-3.5 w-3.5 shrink-0"/>Seus cadastros ficam salvos na sua conta FinPulse.</p>
   </section>;
 }
