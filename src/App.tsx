@@ -31,6 +31,7 @@ import { EmailAccessFlow } from './components/EmailAccess';
 import { AuthGate, SavedState } from './components/AuthGate';
 import { ConnectedAssets } from './components/ConnectedAssets';
 import { LoansSection } from './components/LoansSection';
+import { FirstBankSetup } from './components/FirstBankSetup';
 import { ConnectionsSection } from './components/ConnectionsSection';
 import { BalanceEvolution } from './components/BalanceEvolution';
 import { HomeActivity, HomeShortcuts } from './components/HomeActivity';
@@ -434,7 +435,8 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
     if (!loaded) throw new Error('A conexão foi salva, mas os dados ainda não puderam ser carregados. Aguarde a sincronização e atualize o painel.');
 
     setPluggyItemIds(nextItemIds);
-    showToast('Banco conectado ao painel.');
+    navigateToTab('overview');
+    showToast('Banco conectado à sua conta FinPulse.');
   };
 
   const handleAccountUnlinked = async (accountId: string) => {
@@ -518,7 +520,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         {activeTab === 'learn' && <InvestmentAcademySection selicRateAnnual={realIndicators?.selic.metaAnnualPct} cdiRateAnnual={realIndicators?.cdi.annualizedPct}/>}
         {activeTab === 'personal-budget' && <PersonalBudgetPanel mode="cards" privateMode={isPrivateMode} itemIds={pluggyItemIds} cards={creditCards} accounts={bankAccounts} onOpenCards={() => { setAccountsView('cards'); navigateToTab('accounts'); }}/>}
         {activeTab === 'planning' && <><PersonalBudgetPanel mode="planning" privateMode={isPrivateMode} itemIds={pluggyItemIds}/><PlanningSection data={planning} onChange={setPlanning} transactions={classifiedTransactions} privateMode={isPrivateMode} history={history} controls={controlView} onConnections={() => navigateToTab('connections')} onLoans={() => navigateToTab('loans')}/></>}
-        {activeTab === 'overview' && <>
+        {activeTab === 'overview' && (!pluggyItemIds.length && !bankAccounts.length && !creditCards.length && !holdings.length && !planning.manualCards?.length ? <FirstBankSetup onConnect={() => { setReconnectItem(undefined); setIsOpenFinanceConsentOpen(true); }} onManual={() => navigateToTab('accounts')} onPlanning={() => navigateToTab('planning')}/> : <>
         <HomeShortcuts onNavigate={navigateToTab} onCards={() => { setAccountsView('cards'); navigateToTab('accounts'); }}/>
         <MoneyAvailable accounts={bankAccounts} cards={creditCards} investments={providerInvestments} loans={loans} data={planning} privateMode={isPrivateMode}/>
         <FinancialOverview manualCardCount={planning.manualCards?.length || 0} accounts={bankAccounts} cards={creditCards} investments={providerInvestments} privateMode={isPrivateMode} onOpenAccounts={() => { setAccountsView('accounts'); navigateToTab('accounts'); }} onOpenCards={() => { setAccountsView('cards'); navigateToTab('accounts'); }} onOpenAssets={() => navigateToTab('assets')} onConnect={() => setIsOpenFinanceConsentOpen(true)}/>
@@ -534,7 +536,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
           /></div>
         </details>
 
-        </>}
+        </>)}
 
         {activeTab === 'accounts' && <AccountsSection cardTools={<ManualCardsPanel data={planning} onChange={setPlanning} privateMode={isPrivateMode} connectedCardCount={creditCards.length}/>} initialTab={accountsView} manualTools={<>{manualError && <p role="alert" className="text-rose-300">{manualError}</p>}<StatementImport accounts={manualBankAccounts} onChanged={manualChanged} privateMode={isPrivateMode}/></>} accounts={bankAccounts} cards={creditCards} itemIds={pluggyItemIds} privateMode={isPrivateMode} onRemove={handleAccountUnlinked}/>}
 

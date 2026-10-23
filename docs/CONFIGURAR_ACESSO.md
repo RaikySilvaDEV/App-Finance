@@ -67,7 +67,7 @@ FINPULSE_OWNER_EMAIL=seu_email_de_administrador
 
 Essas variáveis liberam o fluxo no FinPulse; não contratam um plano nem concedem permissões na Pluggy. Até a liberação, mantenha `personal` e `false`. A importação pessoal fica restrita ao responsável. Se FINPULSE_OWNER_EMAIL estiver vazio, o único proprietário das conexões existentes é preservado como responsável.
 
-Após reiniciar/reimplantar, cada pessoa entra no FinPulse e seleciona **Conexões → Conectar banco → Escolher meu banco**. O widget oficial abre a autorização bancária. Não é necessário criar conta pessoal MeuPluggy nem copiar identificadores.
+Após reiniciar/reimplantar, cada pessoa entra no FinPulse e seleciona **Conectar meu banco, na tela inicial, ou Conexões → Adicionar conexão**. O widget oficial abre a autorização bancária. Não é necessário criar conta pessoal MeuPluggy nem copiar identificadores.
 
 O servidor cria o token com o usuário autenticado e verifica a propriedade na Pluggy antes de salvar a conexão. As chaves ficam no servidor. O fluxo consulta dados e não inicia pagamentos. Produtos como empréstimos e investimentos e a frequência de atualização dependem do banco, conector e plano.
 
@@ -79,3 +79,12 @@ A atualização automática exige o webhook na mesma aplicação Pluggy. A ativa
 - [Widget Pluggy](https://docs.pluggy.ai/pt/docs/connect-widget/introduction)
 - [Tokens do widget](https://docs.pluggy.ai/pt/docs/connect-widget/authentication)
 - [MeuPluggy pessoal](https://docs.pluggy.ai/en/docs/guides/meu-pluggy-personal-use)
+
+
+## Primeiro acesso dentro do FinPulse
+
+Uma conta sem dados financeiros encontra uma tela inicial com conexão bancária, cadastro manual e planejamento. Quando o modo empresarial está habilitado, **Conectar meu banco** abre o widget oficial diretamente. Ao concluir, o servidor confere a propriedade, salva o vínculo no usuário autenticado e carrega a visão geral.
+
+O cadastro por e-mail já cria uma sessão. O Google aparece como opção quando as credenciais OAuth estão configuradas. Nenhum usuário precisa receber chaves da aplicação ou copiar itemIds nesse fluxo empresarial.
+
+A aplicação demo não permite transformar o conector MeuPluggy em uma conexão direta. O código não habilita contratos ou permissões na Pluggy: a liberação para dados de terceiros e a configuração das credenciais pelo responsável continuam pendentes quando esse modo está desativado.

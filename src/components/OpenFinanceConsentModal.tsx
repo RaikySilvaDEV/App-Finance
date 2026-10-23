@@ -17,7 +17,7 @@ export const OpenFinanceConsentModal: React.FC<Props> = ({ isOpen, onClose, onCo
     return () => controller.abort();
   }, [isOpen, updateItem]);
   useEffect(() => {
-    if (!isOpen || !updateItem) return;
+    if (!isOpen || (!updateItem && !status?.directConnection)) return;
     const controller = new AbortController();
     setWidget(null); setExternalUpdate(false); setError(''); setBusy(true);
     fetch('/api/open-finance/connect-token', {
@@ -31,7 +31,7 @@ export const OpenFinanceConsentModal: React.FC<Props> = ({ isOpen, onClose, onCo
     }).catch((reason) => { if (!controller.signal.aborted) setError(reason.message); })
       .finally(() => { if (!controller.signal.aborted) setBusy(false); });
     return () => controller.abort();
-  }, [isOpen, updateItem]);
+  }, [isOpen, updateItem, status?.directConnection]);
   async function save(id: string) { setBusy(true); setError(''); try { if (updateItem && id !== updateItem) throw new Error('A autorização retornou uma conexão diferente. Tente novamente.'); await onConnected(id); setItemId(''); setWidget(null); onClose(); } catch (reason: any) { setWidget(null); setError(reason.message || 'Não foi possível salvar a conexão.'); } finally { setBusy(false); } }
   async function connect() {
     setBusy(true); setError('');
@@ -46,7 +46,7 @@ export const OpenFinanceConsentModal: React.FC<Props> = ({ isOpen, onClose, onCo
     <p className="mt-2 text-sm text-slate-400">Suas contas, em um só lugar. Somente leitura.</p>
     {error && <p role="alert" className="mt-4 text-sm text-rose-300">{error}</p>}
     {!status && !error && <p className="mt-5 text-sm" role="status">Carregando…</p>}
-    {!updateItem && (status?.directConnection ? <div className="mt-6"><p className="text-sm">Escolha seu banco e autorize o acesso aos seus dados na conexão segura da Pluggy.</p><button disabled={busy || !!widget} onClick={() => void connect()} className="mt-5 w-full rounded-lg bg-violet-400 py-3 font-semibold text-slate-950 disabled:opacity-50">{busy ? 'Aguarde…' : 'Escolher meu banco'}</button></div> : status && !status.personalImport ? <p className="mt-6 text-sm">A conexão de bancos para novos usuários aguarda ativação pelo responsável. Você já pode cadastrar sua conta manual e importar extratos OFX/CSV, sem contratar uma integração bancária.{onManual && <button onClick={onManual} className="mt-4 block w-full rounded-lg bg-violet-400 p-3 font-semibold text-slate-950">Cadastrar conta e importar extrato</button>}</p> : null)}
+    {!updateItem && (status?.directConnection ? <div className="mt-6"><p className="text-sm">Escolha seu banco e autorize o acesso aos seus dados na conexão segura da Pluggy.</p>{busy && <p role="status" className="mt-4 text-sm">Abrindo conexão segura…</p>}{!busy && !widget && <button onClick={() => void connect()} className="mt-5 w-full rounded-lg bg-rose-400 py-3 font-semibold text-slate-950">Abrir seleção de bancos</button>}</div> : status && !status.personalImport ? <p className="mt-6 text-sm">A conexão de bancos para novos usuários aguarda ativação pelo responsável. Você já pode cadastrar sua conta manual e importar extratos OFX/CSV, sem contratar uma integração bancária.{onManual && <button onClick={onManual} className="mt-4 block w-full rounded-lg bg-violet-400 p-3 font-semibold text-slate-950">Cadastrar conta e importar extrato</button>}</p> : null)}
     {!updateItem && status?.personalImport && !status.directConnection && <div className="mt-6 space-y-4"><p className="text-sm">Autorize seus bancos no Meu Pluggy e vincule os dados ao seu painel.</p><a href="https://meu.pluggy.ai/connections" target="_blank" rel="noreferrer" className="block rounded-lg border border-slate-700 px-4 py-3 text-center text-sm text-white">1. Autorizar banco no Meu Pluggy ↗</a><button disabled={busy || !!widget || !status.configured} onClick={() => void connect()} className="w-full rounded-lg bg-violet-400 px-4 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50">{busy ? 'Abrindo…' : '2. Vincular pelo MeuPluggy'}</button><p className="text-xs text-slate-500">Dados reais. Atualizações do Meu Pluggy a cada 24 horas.</p></div>}
     {!updateItem && status?.personalImport && <details className="mt-6 rounded-lg border border-white/10 p-3"><summary className="cursor-pointer text-sm">Importar conexão pessoal existente</summary><p className="mt-3 text-xs text-slate-400">No Dashboard, abra sua aplicação → Demo, conecte MeuPluggy e copie o itemId. Esta opção é pessoal.</p><a href="https://dashboard.pluggy.ai/applications" target="_blank" rel="noreferrer" className="mt-3 block text-xs text-violet-300">Abrir Dashboard Pluggy ↗</a><label className="mt-4 block text-xs" htmlFor="personal-item">Identificador da conexão</label><input id="personal-item" value={itemId} onChange={(event) => setItemId(event.target.value)} placeholder="itemId" className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm"/><button disabled={busy || !status.configured || !/^[0-9a-f-]{36}$/i.test(itemId.trim())} onClick={() => void save(itemId.trim())} className="mt-3 w-full rounded-lg bg-violet-400 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50">{busy ? 'Carregando…' : 'Importar conexão'}</button></details>}
     {updateItem && !externalUpdate && busy && <p role="status" className="mt-5 text-sm">Abrindo autorização da Pluggy…</p>}
