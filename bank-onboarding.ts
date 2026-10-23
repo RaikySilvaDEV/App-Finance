@@ -51,6 +51,15 @@ export function installBankOnboarding(app: Express) {
       const userId = res.locals.user.id;
       const itemId = req.body?.itemId;
       if (itemId && (typeof itemId !== 'string' || !(await ownedConnections(userId)).includes(itemId) || !JSON.parse(res.locals.user.state || '{}').itemIds?.includes(itemId))) return res.status(403).json({ error: 'Conexão não pertence à sua conta.' });
+      // Updates are restricted to an existing connection owned by this user.
+      // Use its connector, rather than the list intended for new connections.
+      if (itemId) {
+        const item = await pluggyRequest(`/items/${itemId}`);
+        if (item.connector?.isSandbox) return res.status(400).json({ error: 'Esta conexão não é de um banco real.' });
+        const result = await pluggyRequest('/connect_token', { method: 'POST', body: JSON.stringify({ itemId }) });
+        if (!result.accessToken) throw new Error();
+        return res.json({ connectToken: result.accessToken, connectorIds: [item.connector.id], isProxy: item.connector.name === 'MeuPluggy' });
+      }
       const connectorIds: number[] = [];
       for (let page = 1; ; page++) {
         const list = await pluggyRequest(`/connectors?countries=BR&sandbox=false&page=${page}`);

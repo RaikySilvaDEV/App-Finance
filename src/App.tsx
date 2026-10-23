@@ -181,6 +181,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   
   // Movement & Bank Modals
+  const [bankRevision, setBankRevision] = useState(0);
   const [reconnectItem, setReconnectItem] = useState<string | undefined>();
   const [isOpenFinanceConsentOpen, setIsOpenFinanceConsentOpen] = useState<boolean>(false);
 
@@ -389,6 +390,12 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
   };
 
   const handleSyncNow = async () => {
+    if (pluggyItemIds.length) {
+      void fetchRealMarketData();
+      if (pluggyItemIds.length === 1) { setReconnectItem(pluggyItemIds[0]); setIsOpenFinanceConsentOpen(true); }
+      else { navigateToTab('connections'); showToast('Escolha a conexão que deseja atualizar.'); }
+      return;
+    }
     setIsSyncing(true);
     await fetchRealMarketData();
     try { const ids = await reloadConnections(); await fetchBankAccounts([...new Set([...pluggyItemIds, ...ids])]); } catch (reason: any) { setProviderSyncError(reason.message); }
@@ -413,6 +420,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
 
   const handlePluggyConnected = async (itemId: string) => {
     if (pluggyItemIds.includes(itemId)) {
+      setBankRevision(value => value + 1);
       const loadedExisting = await fetchBankAccounts(pluggyItemIds);
       if (!loadedExisting) throw new Error('Não consegui carregar esta conexão. Confira se o itemId pertence ao conector MeuPluggy e se suas credenciais são da mesma aplicação.');
       return;
@@ -533,7 +541,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         {activeTab === 'assets' && <ConnectedAssets snapshots={history.snapshots} section="investments" accounts={bankAccounts} investments={visibleProviderInvestments} creditCards={[]} isPrivateMode={isPrivateMode} />}
 
         {activeTab === 'loans' && <><ManualLoansPanel data={planning} onChange={setPlanning} privateMode={isPrivateMode}/><LoansSection loans={loans} complete={loansComplete} unsupported={loansUnsupported} isPrivateMode={isPrivateMode} onRefresh={() => fetchBankAccounts()} /></>}
-        {activeTab === 'connections' && <><SyncStatus data={controls.data} reload={controls.reload}/><ConnectionsSection onManual={() => navigateToTab('accounts')} onReconnect={(id) => { setReconnectItem(id); setIsOpenFinanceConsentOpen(true); }} itemIds={pluggyItemIds} onConnect={() => setIsOpenFinanceConsentOpen(true)} onRemove={(id) => { setPluggyItemIds((items) => items.filter((item) => item !== id)); showToast('Conexão removida do painel. A autorização bancária continua ativa.'); }}/></>}
+        {activeTab === 'connections' && <><SyncStatus data={controls.data} reload={controls.reload}/><ConnectionsSection onReload={async () => { if (!await fetchBankAccounts()) throw new Error('Não foi possível consultar todos os dados bancários. Tente novamente.'); }} refreshKey={bankRevision} onManual={() => navigateToTab('accounts')} onReconnect={(id) => { setReconnectItem(id); setIsOpenFinanceConsentOpen(true); }} itemIds={pluggyItemIds} onConnect={() => setIsOpenFinanceConsentOpen(true)} onRemove={(id) => { setPluggyItemIds((items) => items.filter((item) => item !== id)); showToast('Conexão removida do painel. A autorização bancária continua ativa.'); }}/></>}
 
         {activeTab === 'ledger' && (<>
         {/* 3. Real Movement Ledger (Extrato de Transferências e Aportes) */}
