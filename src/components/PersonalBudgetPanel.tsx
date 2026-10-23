@@ -169,61 +169,86 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
     </div>
 
     </>}
-    {mode === 'planning' && <div className="space-y-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4">
-      <div className="flex items-center gap-2"><Wallet className="h-5 w-5 text-cyan-300"/><h3 className="font-semibold">Proteção do salário</h3></div>
-      <p className="text-xs leading-relaxed text-slate-400">Salário: R$ 827,35 dia 5 + R$ 691,85 dia 20. Ajuda da mãe: até R$ 200 em dois domingos, conte somente o que já recebeu. Valores manuais deste painel não são movimentações bancárias.</p>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl bg-white/[0.04] p-3"><p className="text-xs text-slate-400">Salário mensal</p><p className="text-lg font-semibold">{money(salary)}</p></div>
-        <div className="rounded-xl bg-white/[0.04] p-3"><p className="text-xs text-slate-400">Disponível após essenciais</p><p className={`text-lg font-semibold ${available < 0 ? 'text-rose-400' : 'text-emerald-300'}`}>{money(available)}</p></div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <label className="text-xs text-slate-400">Ajuda já recebida (R$)<input className={inputClass} type="number" min="0" max="200" value={receivedAid} onChange={e=>setReceivedAid(Math.min(200,Math.max(0,Number(e.target.value)||0)))}/></label>
-        <label className="text-xs text-slate-400">Água e luz · dia 5<input className={inputClass} type="number" min="0" value={utilities} onChange={e=>setUtilities(Math.max(0,Number(e.target.value)||0))}/></label>
-        <label className="text-xs text-slate-400">Mercado, limpeza e higiene<input className={inputClass} type="number" min="0" value={market} onChange={e=>setMarket(Math.max(0,Number(e.target.value)||0))}/></label>
-        <label className="text-xs text-slate-400">Combustível<input className={inputClass} type="number" min="0" value={fuel} onChange={e=>setFuel(Math.max(0,Number(e.target.value)||0))}/></label>
-      </div>
-      <div className="space-y-2 rounded-xl border border-white/[0.06] p-3 text-sm">
-        <p className="font-semibold">Contas e vencimentos</p>
-        {[[ 'Água e luz · dia 5', utilities ],['Internet residencial · dia 8',89.90],['Atacadão · dia 10 (nov–fev)',Math.min(225,tireDue)],['Internet celular · dia 20',59.90],['Mercado e higiene · mês',market],['Combustível · mês',fuel]].map(([label,value])=><div key={String(label)} className="flex justify-between gap-2 text-slate-300"><span>{label}</span><span className="tabular-nums">{money(Number(value))}</span></div>)}
-      </div>
-      <div className="space-y-3 rounded-xl border border-white/[0.06] p-3">
-        <p className="text-sm font-semibold">Quitar cartões · saldos manuais</p>
-        <p className="text-xs text-slate-400">Nubank R$ 250 vencidos; Neon R$ 458,08 em 23/11; pneus 4 × R$ 225. Registre pagamentos realizados e compras novas sem duplicar valores.</p>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="text-xs text-slate-400">Novas compras Neon<input className={inputClass} type="number" min="0" value={newNeon} onChange={e=>setNewNeon(Math.max(0,Number(e.target.value)||0))}/></label>
-          <label className="text-xs text-slate-400">Nubank já pago<input className={inputClass} type="number" min="0" value={paidNubank} onChange={e=>setPaidNubank(Math.max(0,Number(e.target.value)||0))}/></label>
-          <label className="text-xs text-slate-400">Neon já pago<input className={inputClass} type="number" min="0" value={paidNeon} onChange={e=>setPaidNeon(Math.max(0,Number(e.target.value)||0))}/></label>
-          <label className="text-xs text-slate-400">Pneus já pagos<input className={inputClass} type="number" min="0" value={paidTires} onChange={e=>setPaidTires(Math.max(0,Number(e.target.value)||0))}/></label>
+    {mode === 'planning' && <div className="space-y-4">
+      <section className="rounded-3xl border border-white/[0.07] bg-gradient-to-br from-slate-900/90 to-slate-950/60 p-4 sm:p-5" aria-label="Resumo do planejamento">
+        <div className="flex items-center justify-between gap-3">
+          <div><p className="text-[11px] font-medium uppercase tracking-[0.15em] text-slate-500">Seu planejamento</p><h3 className="mt-1 text-lg font-semibold tracking-tight">Visão do mês</h3></div>
+          <Wallet className="h-5 w-5 text-cyan-300" aria-hidden="true"/>
         </div>
-        <div className="flex justify-between text-sm"><span>Saldo Nubank</span><strong>{money(nubankDue)}</strong></div>
-        <div className="flex justify-between text-sm"><span>Saldo Neon</span><strong>{money(neonDue)}</strong></div>
-        <div className="flex justify-between text-sm"><span>Saldo pneus</span><strong>{money(tireDue)}</strong></div>
-        <div className="flex justify-between border-t border-white/10 pt-2 text-sm"><span>Total estimado</span><strong className="text-rose-300">{money(debtTotal)}</strong></div>
-        <p className="text-xs text-slate-400">Após separar a próxima parcela dos pneus, restam {money(afterTire)} para Nubank, Neon e imprevistos. Preserve uma margem de segurança. Juros e valores atualizados precisam ser conferidos no banco.</p>
-      </div>
-      <div className="space-y-3 rounded-xl border border-white/[0.06] p-3">
-        <div><h3 className="text-sm font-semibold">Calendário de pagamentos</h3><p className="mt-1 text-xs text-slate-400">Marque somente depois de pagar. As marcações ficam salvas neste navegador.</p></div>
-        <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-900/50 p-3">
+        <label htmlFor="plan-month" className="sr-only">Selecionar mês</label>
+        <select id="plan-month" value={planMonth} onChange={e=>setPlanMonth(e.target.value)} className="mt-4 w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 text-sm text-slate-100">
+          {PLAN_MONTHS.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+        <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-white/[0.025] px-1 py-4">
           <ProgressRing value={monthTotal?100*monthPaid/monthTotal:0} label="Contas do mês" subLabel={money(Math.max(0,monthTotal-monthPaid))+' pendentes'}/>
           <ProgressRing value={debtInitial?100*debtPaid/debtInitial:100} label="Quitar dívidas" subLabel={money(Math.max(0,debtInitial-debtPaid))+' restantes'} tone="emerald"/>
         </div>
-        <label className="block text-xs text-slate-400">Mês
-          <select value={planMonth} onChange={e=>setPlanMonth(e.target.value)} className={inputClass}>
-            {PLAN_MONTHS.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-        </label>
-        {PLAN_ITEMS.filter(item=>item.month===planMonth).map(item=><label key={item.id} className="flex cursor-pointer items-center gap-3 border-b border-white/[0.05] py-2">
-          <input type="checkbox" checked={checkedBills.includes(item.id)} onChange={e=>setCheckedBills(old=>e.target.checked?[...old,item.id]:old.filter(id=>id!==item.id))} className="h-4 w-4 accent-cyan-400"/>
-          <span className="min-w-0 flex-1"><span className={`block text-sm ${checkedBills.includes(item.id)?'text-slate-500 line-through':'text-slate-200'}`}>{item.label}</span><span className="text-xs text-slate-500">{String(item.day).padStart(2,'0')}/{item.month.slice(5)}/{item.month.slice(0,4)} · {item.debt?'Dívida':'Conta mensal'}</span></span>
-          <span className="text-sm tabular-nums">{money(item.amount)}</span>
-        </label>)}
-        <div className="space-y-1 border-t border-white/10 pt-3 text-sm">
-          <div className="flex justify-between"><span className="text-slate-400">Contas listadas pendentes neste mês</span><strong>{money(PLAN_ITEMS.filter(item=>item.month===planMonth&&!checkedBills.includes(item.id)).reduce((sum,item)=>sum+item.amount,0))}</strong></div>
-          <div className="flex justify-between"><span className="text-slate-400">Dívidas listadas pendentes até fevereiro</span><strong className="text-rose-300">{money(PLAN_ITEMS.filter(item=>item.debt&&!checkedBills.includes(item.id)).reduce((sum,item)=>sum+item.amount,0)+newNeon)}</strong></div>
+        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/[0.06] pt-4">
+          <div><p className="text-xs text-slate-500">Salário mensal</p><p className="mt-1 text-lg font-semibold tabular-nums">{money(salary)}</p></div>
+          <div><p className="text-xs text-slate-500">Após essenciais</p><p className={`mt-1 text-lg font-semibold tabular-nums ${available<0?'text-rose-400':'text-emerald-300'}`}>{money(available)}</p></div>
         </div>
-        <p className="text-xs leading-relaxed text-slate-500">Mercado e combustível são metas mensais separadas; não são contas quitadas. Novas compras Neon são adicionadas ao saldo estimado, sem duplicar a fatura conhecida. Juros e faturas futuras ainda não informadas não estão incluídos. Os campos de pagamentos parciais acima são estimativas separadas e não abatem esta lista; não registre o mesmo pagamento duas vezes.</p>
-      </div>
-      <p className="text-xs text-amber-300">Não use limite do cartão como renda. Pagar parcialmente pode gerar juros. As marcações do calendário são salvas neste navegador, mas não são sincronizadas com sua conta e não efetuam pagamentos. Outros campos de simulação não são salvos.</p>
+        <p className="mt-3 text-[11px] leading-relaxed text-slate-500">Valores estimados. A ajuda familiar só entra no cálculo quando informada como recebida.</p>
+      </section>
+
+      <section className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4" aria-label="Calendário de pagamentos">
+        <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-semibold">Pagamentos</h3><span className="text-xs text-slate-500">{monthItems.filter(item=>checkedBills.includes(item.id)).length}/{monthItems.length} pagos</span></div>
+        <div className="divide-y divide-white/[0.05]">
+          {monthItems.map(item=><label key={item.id} className="flex min-h-14 cursor-pointer items-center gap-3 py-3">
+            <input type="checkbox" checked={checkedBills.includes(item.id)} onChange={e=>setCheckedBills(old=>e.target.checked?[...old,item.id]:old.filter(id=>id!==item.id))} className="h-4 w-4 shrink-0 accent-cyan-400"/>
+            <span className="min-w-0 flex-1">
+              <span className={`block text-[13px] font-medium ${checkedBills.includes(item.id)?'text-slate-500 line-through':'text-slate-200'}`}>{item.label}</span>
+              <span className="mt-0.5 block text-[11px] text-slate-500">{String(item.day).padStart(2,'0')}/{item.month.slice(5)}/{item.month.slice(0,4)}</span>
+            </span>
+            <span className="shrink-0 text-[13px] font-medium tabular-nums">{money(item.amount)}</span>
+          </label>)}
+        </div>
+        {!monthItems.length && <p className="py-4 text-xs text-slate-500">Nenhum pagamento cadastrado neste mês.</p>}
+        <div className="flex items-center justify-between border-t border-white/[0.07] pt-3 text-sm"><span className="text-slate-400">Pendente no mês</span><strong>{money(Math.max(0,monthTotal-monthPaid))}</strong></div>
+      </section>
+
+      <details className="group rounded-2xl border border-white/[0.07] bg-white/[0.02]">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+          <span><span className="block text-sm font-semibold">Orçamento mensal</span><span className="mt-1 block text-xs text-slate-500">Ajustar alimentação, combustível e contas</span></span>
+          <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90"/>
+        </summary>
+        <div className="space-y-3 border-t border-white/[0.06] p-4">
+          <p className="text-xs text-slate-400">Salário: R$ 827,35 no dia 5 e R$ 691,85 no dia 20.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="text-xs text-slate-400">Ajuda recebida (R$)<input className={inputClass} type="number" min="0" max="200" value={receivedAid} onChange={e=>setReceivedAid(Math.min(200,Math.max(0,Number(e.target.value)||0)))}/></label>
+            <label className="text-xs text-slate-400">Água e luz (R$)<input className={inputClass} type="number" min="0" value={utilities} onChange={e=>setUtilities(Math.max(0,Number(e.target.value)||0))}/></label>
+            <label className="text-xs text-slate-400">Mercado e higiene (R$)<input className={inputClass} type="number" min="0" value={market} onChange={e=>setMarket(Math.max(0,Number(e.target.value)||0))}/></label>
+            <label className="text-xs text-slate-400">Combustível (R$)<input className={inputClass} type="number" min="0" value={fuel} onChange={e=>setFuel(Math.max(0,Number(e.target.value)||0))}/></label>
+          </div>
+          <div className="space-y-2 border-t border-white/[0.06] pt-3 text-xs text-slate-400">
+            <div className="flex justify-between"><span>Internet residencial · dia 8</span><span>{money(89.90)}</span></div>
+            <div className="flex justify-between"><span>Internet celular · dia 20</span><span>{money(59.90)}</span></div>
+            <div className="flex justify-between font-medium text-slate-200"><span>Total essencial estimado</span><span>{money(essential)}</span></div>
+          </div>
+        </div>
+      </details>
+
+      <details className="group rounded-2xl border border-white/[0.07] bg-white/[0.02]">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+          <span><span className="block text-sm font-semibold">Detalhes das dívidas</span><span className="mt-1 block text-xs text-slate-500">Saldos e pagamentos parciais manuais</span></span>
+          <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90"/>
+        </summary>
+        <div className="space-y-3 border-t border-white/[0.06] p-4">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="text-xs text-slate-400">Novas compras Neon<input className={inputClass} type="number" min="0" value={newNeon} onChange={e=>setNewNeon(Math.max(0,Number(e.target.value)||0))}/></label>
+            <label className="text-xs text-slate-400">Nubank já pago<input className={inputClass} type="number" min="0" value={paidNubank} onChange={e=>setPaidNubank(Math.max(0,Number(e.target.value)||0))}/></label>
+            <label className="text-xs text-slate-400">Neon já pago<input className={inputClass} type="number" min="0" value={paidNeon} onChange={e=>setPaidNeon(Math.max(0,Number(e.target.value)||0))}/></label>
+            <label className="text-xs text-slate-400">Pneus já pagos<input className={inputClass} type="number" min="0" value={paidTires} onChange={e=>setPaidTires(Math.max(0,Number(e.target.value)||0))}/></label>
+          </div>
+          <div className="space-y-2 border-t border-white/[0.06] pt-3 text-sm">
+            <div className="flex justify-between"><span className="text-slate-400">Nubank</span><span>{money(nubankDue)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Neon</span><span>{money(neonDue)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-400">Pneus</span><span>{money(tireDue)}</span></div>
+            <div className="flex justify-between border-t border-white/[0.06] pt-3 font-semibold"><span>Total estimado</span><span className="text-rose-300">{money(debtTotal)}</span></div>
+          </div>
+          <p className="text-xs leading-relaxed text-slate-500">Pagamentos parciais e marcações do calendário são controles distintos. Não registre o mesmo pagamento duas vezes. Juros e faturas futuras não informadas não estão incluídos.</p>
+        </div>
+      </details>
+      <p className="px-1 text-[11px] leading-relaxed text-slate-500">As marcações são salvas apenas neste navegador. O planejamento não movimenta dinheiro nem altera dados bancários. Os cartões conectados e as faturas da Pluggy continuam na seção Meus cartões.</p>
     </div>}
 
   </section>;
