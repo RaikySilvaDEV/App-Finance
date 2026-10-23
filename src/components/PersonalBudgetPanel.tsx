@@ -20,8 +20,8 @@ const PLAN_KEY='finpulse-personal-payments-v1';
 function ProgressRing({value,label,subLabel,tone='cyan'}:{value:number;label:string;subLabel:string;tone?:'cyan'|'emerald'}) {
   const progress=Math.min(100,Math.max(0,value));
   const circumference=2*Math.PI*48;
-  return <div className="flex flex-col items-center gap-2">
-    <div className="relative h-36 w-36" role="progressbar" aria-label={label} aria-valuenow={Math.round(progress)} aria-valuemin={0} aria-valuemax={100}>
+  return <div className="flex min-w-0 items-center gap-3">
+    <div className="relative h-20 w-20 shrink-0" role="progressbar" aria-label={label} aria-valuenow={Math.round(progress)} aria-valuemin={0} aria-valuemax={100}>
       <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90" aria-hidden="true">
         <circle cx="60" cy="60" r="48" fill="none" stroke="currentColor" strokeWidth="9" className="text-slate-800"/>
         <circle cx="60" cy="60" r="48" fill="none" stroke="currentColor" strokeWidth="9" strokeLinecap="round"
@@ -29,12 +29,11 @@ function ProgressRing({value,label,subLabel,tone='cyan'}:{value:number;label:str
           className={`${tone==='emerald'?'text-emerald-400':'text-cyan-400'} transition-all duration-500 ease-out`}/>
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <strong className="text-2xl tabular-nums">{Math.round(progress)}%</strong>
-        <span className="text-[10px] text-slate-400">concluído</span>
+        <strong className="text-base font-semibold tabular-nums">{Math.round(progress)}%</strong>
+        
       </div>
     </div>
-    <p className="text-center text-xs font-medium text-slate-200">{label}</p>
-    <p className="text-center text-[11px] text-slate-400">{subLabel}</p>
+    <div className="min-w-0"><p className="text-xs font-medium text-slate-300">{label}</p><p className="mt-1 text-[11px] leading-relaxed text-slate-500">{subLabel}</p></div>
   </div>;
 }
 
@@ -169,31 +168,29 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
 
     </>}
     {mode === 'planning' && <div className="planning-summary-grid">
-      <section className="rounded-3xl border border-white/[0.07] bg-gradient-to-br from-slate-900/90 to-slate-950/60 p-4 sm:p-5" aria-label="Resumo do planejamento">
-        <div className="flex items-center justify-between gap-3">
-          <div><p className="text-[11px] font-medium uppercase tracking-[0.15em] text-slate-500">Seu planejamento</p><h3 className="mt-1 text-lg font-semibold tracking-tight">Visão do mês</h3></div>
-          <Wallet className="h-5 w-5 text-cyan-300" aria-hidden="true"/>
+      <section className="overview-card planning-month-summary" aria-label="Resumo do planejamento">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.04] px-5 py-4">
+          <h3 className="flex items-center gap-2 text-xs font-medium text-slate-400"><Wallet className="h-4 w-4 text-rose-400" aria-hidden="true"/>Resumo do mês</h3>
+          <label htmlFor="plan-month" className="sr-only">Selecionar mês</label>
+          <select id="plan-month" value={planMonth} onChange={e=>setPlanMonth(e.target.value)} className="min-h-10 min-w-0 max-w-full rounded-lg border border-white/[0.08] bg-[#101012] px-3 text-xs text-slate-300">
+            {PLAN_MONTHS.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
         </div>
-        <label htmlFor="plan-month" className="sr-only">Selecionar mês</label>
-        <select id="plan-month" value={planMonth} onChange={e=>setPlanMonth(e.target.value)} className="mt-4 w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 text-sm text-slate-100">
-          {PLAN_MONTHS.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
-        <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-white/[0.025] px-1 py-4">
+        <div className="grid grid-cols-2 gap-4 px-5 py-6">
+          <div className="min-w-0"><p className="text-[11px] text-slate-500">Salário mensal</p><p className="mt-2 break-words text-xl font-semibold tracking-tight tabular-nums">{money(salary)}</p></div>
+          <div className="min-w-0"><p className="text-[11px] text-slate-500">Após essenciais · estimado</p><p className={`mt-2 break-words text-xl font-semibold tracking-tight tabular-nums ${available<0?'text-rose-400':'text-emerald-300'}`}>{money(available)}</p></div>
+        </div>
+        <div className="grid gap-3 border-t border-white/[0.04] px-4 py-4 min-[600px]:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
           <ProgressRing value={monthTotal?100*monthPaid/monthTotal:0} label="Contas do mês" subLabel={money(Math.max(0,monthTotal-monthPaid))+' pendentes'}/>
           <ProgressRing value={debtInitial?100*debtPaid/debtInitial:100} label="Quitar dívidas" subLabel={money(Math.max(0,debtInitial-debtPaid))+' restantes'} tone="emerald"/>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/[0.06] pt-4">
-          <div><p className="text-xs text-slate-500">Salário mensal</p><p className="mt-1 text-lg font-semibold tabular-nums">{money(salary)}</p></div>
-          <div><p className="text-xs text-slate-500">Após essenciais</p><p className={`mt-1 text-lg font-semibold tabular-nums ${available<0?'text-rose-400':'text-emerald-300'}`}>{money(available)}</p></div>
-        </div>
-        <p className="mt-3 text-[11px] leading-relaxed text-slate-500">Valores estimados. A ajuda familiar só entra no cálculo quando informada como recebida.</p>
       </section>
 
-      <section className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4" aria-label="Calendário de pagamentos">
-        <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-semibold">Pagamentos</h3><span className="text-xs text-slate-500">{monthItems.filter(item=>checkedBills.includes(item.id)).length}/{monthItems.length} pagos</span></div>
+      <section className="overview-card p-5" aria-label="Calendário de pagamentos">
+        <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-xs font-medium text-slate-400">Pagamentos do mês</h3><span className="text-xs text-slate-500">{monthItems.filter(item=>checkedBills.includes(item.id)).length}/{monthItems.length} pagos</span></div>
         <div className="divide-y divide-white/[0.05]">
-          {monthItems.map(item=><label key={item.id} className="flex min-h-14 cursor-pointer items-center gap-3 py-3">
-            <input type="checkbox" checked={checkedBills.includes(item.id)} onChange={e=>setCheckedBills(old=>e.target.checked?[...old,item.id]:old.filter(id=>id!==item.id))} className="h-4 w-4 shrink-0 accent-cyan-400"/>
+          {monthItems.map(item=><label key={item.id} className="group flex min-h-16 cursor-pointer items-center gap-3 rounded-lg px-1 py-3 transition-colors hover:bg-white/[0.025]">
+            <input type="checkbox" checked={checkedBills.includes(item.id)} onChange={e=>setCheckedBills(old=>e.target.checked?[...old,item.id]:old.filter(id=>id!==item.id))} className="h-4 w-4 shrink-0 accent-rose-400"/>
             <span className="min-w-0 flex-1">
               <span className={`block text-[13px] font-medium ${checkedBills.includes(item.id)?'text-slate-500 line-through':'text-slate-200'}`}>{item.label}</span>
               <span className="mt-0.5 block text-[11px] text-slate-500">{String(item.day).padStart(2,'0')}/{item.month.slice(5)}/{item.month.slice(0,4)}</span>
@@ -205,7 +202,7 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
         <div className="flex items-center justify-between border-t border-white/[0.07] pt-3 text-sm"><span className="text-slate-400">Pendente no mês</span><strong>{money(Math.max(0,monthTotal-monthPaid))}</strong></div>
       </section>
 
-      <details className="group rounded-2xl border border-white/[0.07] bg-white/[0.02]">
+      <details className="group rounded-2xl border border-[#202023] bg-[#0e0e10]">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
           <span><span className="block text-sm font-semibold">Orçamento mensal</span><span className="mt-1 block text-xs text-slate-500">Ajustar alimentação, combustível e contas</span></span>
           <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90"/>
@@ -226,7 +223,7 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
         </div>
       </details>
 
-      <details className="group rounded-2xl border border-white/[0.07] bg-white/[0.02]">
+      <details className="group rounded-2xl border border-[#202023] bg-[#0e0e10]">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
           <span><span className="block text-sm font-semibold">Detalhes das dívidas</span><span className="mt-1 block text-xs text-slate-500">Saldos e pagamentos parciais manuais</span></span>
           <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-open:rotate-90"/>
@@ -247,7 +244,7 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
           <p className="text-xs leading-relaxed text-slate-500">Pagamentos parciais e marcações do calendário são controles distintos. Não registre o mesmo pagamento duas vezes. Juros e faturas futuras não informadas não estão incluídos.</p>
         </div>
       </details>
-      <p className="px-1 text-[11px] leading-relaxed text-slate-500">As marcações são salvas apenas neste navegador. O planejamento não movimenta dinheiro nem altera dados bancários. Os cartões conectados e as faturas da Pluggy continuam na seção Meus cartões.</p>
+      <details className="planning-help text-[11px] leading-relaxed text-slate-500"><summary className="min-h-10 cursor-pointer py-2">Sobre os valores e marcações</summary><div className="max-w-2xl space-y-2 pb-2"><p>Valores estimados. A ajuda familiar só entra no cálculo quando informada como recebida.</p><p>As marcações são salvas apenas neste navegador. O planejamento não movimenta dinheiro nem altera dados bancários. Os cartões conectados e as faturas da Pluggy continuam na seção Meu dinheiro.</p></div></details>
     </div>}
 
   </section>;
