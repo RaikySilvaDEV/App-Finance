@@ -56,9 +56,10 @@ export function installBankOnboarding(app: Express) {
       if (itemId) {
         const item = await pluggyRequest(`/items/${itemId}`);
         if (item.connector?.isSandbox) return res.status(400).json({ error: 'Esta conexão não é de um banco real.' });
+        if (item.connector?.name === 'MeuPluggy') return res.json({ updateMode: 'external' });
         const result = await pluggyRequest('/connect_token', { method: 'POST', body: JSON.stringify({ itemId }) });
         if (!result.accessToken) throw new Error();
-        return res.json({ connectToken: result.accessToken, connectorIds: [item.connector.id], isProxy: item.connector.name === 'MeuPluggy' });
+        return res.json({ connectToken: result.accessToken, connectorIds: [item.connector.id] });
       }
       const connectorIds: number[] = [];
       for (let page = 1; ; page++) {
