@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, RefreshCw } from 'lucide-react';
+import { PriceAlertSettings } from './PriceAlertSettings';
+import { manualCostPositions, type usePriceAlerts } from '../lib/usePriceAlerts';
+import type { PriceAlertRule } from '../lib/planning';
 import type { Asset, PortfolioHolding } from '../types/finance';
 
 interface HistoryPoint { timestamp: number; close: number }
@@ -7,26 +10,15 @@ interface HistoryResponse { points: HistoryPoint[]; currency?: string; source?: 
 interface Series extends HistoryResponse { ticker: string }
 interface ConnectedInvestment { type?: string; code?: string | null; currencyCode?: string; balance?: number | null }
 const noConnectedInvestments: ConnectedInvestment[] = [];
-interface Props { connectedInvestments?: ConnectedInvestment[]; holdings: PortfolioHolding[]; isPrivateMode: boolean; assets: Asset[]; onManageHoldings?: () => void }
+interface Props { priceRules: PriceAlertRule[]; onPriceRulesChange: (rules: PriceAlertRule[]) => void; priceMonitor: ReturnType<typeof usePriceAlerts>; connectedInvestments?: ConnectedInvestment[]; holdings: PortfolioHolding[]; isPrivateMode: boolean; assets: Asset[]; onManageHoldings?: () => void }
 const colors = ['#f12b58', '#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#fb923c', '#22d3ee', '#e879f9', '#a3e635'];
 const day = (stamp: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(stamp);
 const date = (value: string) => new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'UTC' }).format(new Date(value + 'T12:00:00Z'));
 const pct = (value: number) => `${value > 0 ? '+' : ''}${value.toLocaleString('pt-BR', { maximumFractionDigits: 2, minimumFractionDigits: 2 })}%`;
 const money = (value: number, currency: string) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value);
 
-export const GainsPerformanceCard: React.FC<Props> = ({ holdings, isPrivateMode, assets, onManageHoldings, connectedInvestments = noConnectedInvestments }) => {
-  const positions = useMemo(() => {
-    const rows = new Map<string, { quantity: number; invested: number }>();
-    for (const holding of holdings) {
-      const ticker = holding.ticker.trim().toUpperCase();
-      if (!/^[A-Z0-9.^-]{1,15}$/.test(ticker) || !(holding.quantity > 0)) continue;
-      const row = rows.get(ticker) || { quantity: 0, invested: 0 };
-      row.quantity += holding.quantity;
-      row.invested += Number.isFinite(holding.totalInvested) ? holding.totalInvested : holding.quantity * holding.averagePrice;
-      rows.set(ticker, row);
-    }
-    return rows;
-  }, [holdings]);
+export const GainsPerformanceCard: React.FC<Props> = ({ holdings, isPrivateMode, assets, onManageHoldings, priceRules, onPriceRulesChange, priceMonitor, connectedInvestments = noConnectedInvestments }) => {
+  const positions = useMemo(() => manualCostPositions(holdings), [holdings]);
   const ownedTickers = useMemo(() => [...new Set([...positions.keys(), ...connectedInvestments.flatMap(asset => {
     // Only use an explicit exchange code; product names and fixed income are not tickers.
     const code = typeof asset.code === 'string' ? asset.code.trim().toUpperCase().replace(/\.SA$/, '') : '';
@@ -135,6 +127,7 @@ export const GainsPerformanceCard: React.FC<Props> = ({ holdings, isPrivateMode,
       </div>
     </div>
     {!own && onManageHoldings && <p className="text-xs text-slate-400">Cadastre quantidade e preço médio para acompanhar seu ganho ou perda. <button type="button" onClick={onManageHoldings} className="text-rose-300 hover:underline">Cadastrar posição →</button></p>}
+    <PriceAlertSettings holdings={holdings} rules={priceRules} onChange={onPriceRulesChange} evaluations={priceMonitor.evaluations} checking={priceMonitor.checking} checkedAt={priceMonitor.checkedAt} onRefresh={priceMonitor.reload} privateMode={isPrivateMode} onCompareCost={() => { setScope('positions'); setMode('cost'); }}/>
     <div className="relative h-[290px] min-w-0 rounded-xl border border-white/[0.06] bg-[#0b0b0d] p-2 sm:h-[350px]" aria-busy={loading}>
       {loading ? <div role="status" className="absolute inset-0 grid place-items-center text-xs text-slate-400">Carregando as cotações…</div> : !days.length ? <div role="status" className="absolute inset-0 grid place-items-center p-5 text-center text-sm text-slate-500">{!tickerKey ? 'Nenhum ativo com cotação para comparar.' : hidden.length ? 'Selecione um ativo na legenda abaixo.' : 'Histórico indisponível para os ativos selecionados.'}</div> : <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-full w-full touch-pan-y" role="img" tabIndex={0} aria-label={`Comparação percentual de ${visible.map(row => row.ticker).join(', ')}. Use as setas para consultar as datas.`} onPointerMove={move} onPointerDown={move} onPointerLeave={event => { if (event.pointerType === 'mouse') setHoveredDay(null); }} onBlur={() => setHoveredDay(null)} onKeyDown={event => {
         if (!['ArrowLeft', 'ArrowRight', 'Escape'].includes(event.key)) return;

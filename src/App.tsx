@@ -23,6 +23,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { AlertsDialog } from './components/AlertsDialog';
+import { usePriceAlerts } from './lib/usePriceAlerts';
 import { useEntryAlerts } from './lib/useEntryAlerts';
 import { Header } from './components/Header';
 import { DataSkeleton } from './components/DataSkeleton';
@@ -172,7 +173,8 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
     setHasLoadedBankData(true);
   }, [controls.data.sync.cache, hasLoadedBankData, pluggyItemIds]);
   const controlView = { ...controls.data, loans };
-  const currentAlerts = useMemo(() => [...new Map(dailyAlerts(planning, classifiedTransactions, controlView.connections, undefined, controlView.loans).map((alert) => [alert.id, alert])).values()], [planning, classifiedTransactions, controlView.connections, controlView.loans]);
+  const priceMonitor = usePriceAlerts(holdings, planning.priceAlerts);
+  const currentAlerts = useMemo(() => [...new Map([...priceMonitor.alerts, ...dailyAlerts(planning, classifiedTransactions, controlView.connections, undefined, controlView.loans)].map((alert) => [alert.id, alert])).values()], [planning, classifiedTransactions, controlView.connections, controlView.loans, priceMonitor.alerts]);
   const alerts = useEntryAlerts(!history.loading && !bankDataLoading && !controls.loading, currentAlerts.length);
   // Modals
   const [selectedAssetForRisk, setSelectedAssetForRisk] = useState<Asset | null>(null);
@@ -181,6 +183,10 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   
   // Movement & Bank Modals
+  const [marketChartOpen, setMarketChartOpen] = useState(false);
+  const [reviewPriceAlert, setReviewPriceAlert] = useState(false);
+  useEffect(() => { if (reviewPriceAlert && activeTab === 'overview' && !menuTransitioning) { document.getElementById('market-quotes')?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' }); setReviewPriceAlert(false); } }, [reviewPriceAlert, activeTab, menuTransitioning]);
+  function openPriceReview() { alerts.close(); navigateToTab('overview'); setMarketChartOpen(true); setReviewPriceAlert(true); }
   const [bankRevision, setBankRevision] = useState(0);
   const [reconnectItem, setReconnectItem] = useState<string | undefined>();
   const [isOpenFinanceConsentOpen, setIsOpenFinanceConsentOpen] = useState<boolean>(false);
@@ -480,7 +486,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
       )}
 
       <AlertsDialog open={alerts.open} alerts={currentAlerts} privateMode={isPrivateMode} onClose={alerts.close}
-        onSelect={() => { alerts.close(); navigateToTab('planning'); }}/>
+        onSelect={(alert) => { alerts.close(); if (alert.target === 'market') { openPriceReview(); } else navigateToTab('planning'); }}/>
 
       {/* Global Header */}
       <Header
@@ -511,6 +517,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
       {/* Main Content Area */}
       <main data-view={activeTab} id="overview" aria-busy={showDataSkeleton} className="min-w-0 flex-1 w-full px-4 pt-5 pb-24 sm:px-6 lg:px-7 lg:py-8 space-y-6">
         <div className="workspace-title"><p className="workspace-eyebrow">FINPULSE / {{ overview: 'SEU DIA FINANCEIRO', accounts: 'SUAS INSTITUIÇÕES', ledger: 'MOVIMENTAÇÕES', planning: 'SEUS PLANOS' }[activeTab as string] || 'SEU ESPAÇO FINANCEIRO'}</p><h1 className="text-2xl font-semibold tracking-tight text-white">{{ overview: 'Visão geral', accounts: 'Contas e cartões', assets: 'Ativos', ledger: 'Fluxo de caixa', market: 'Mercado', portfolio: 'Posições manuais', loans: 'Empréstimos', connections: 'Conexões', planning: 'Planejamento', 'personal-budget': 'Meu dinheiro', learn: 'Aprender' }[activeTab]}</h1></div>
+        {priceMonitor.alerts.length > 0 && (activeTab !== 'overview' || !marketChartOpen) && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-400/25 bg-rose-400/[0.04] px-4 py-3"><p className="text-xs text-rose-300">{isPrivateMode ? 'Um limite de perda foi atingido nos dados disponíveis.' : `${priceMonitor.alerts.length} ativo(s) atingiram sua margem de perda nos dados disponíveis.`}</p><button type="button" onClick={openPriceReview} className="min-h-10 text-xs font-medium text-rose-300 hover:underline">Revisar ativos →</button></div>}
         {(savingData || saveError) && <p role="status" className="text-xs text-slate-500">{savingData ? 'Salvando seus dados…' : 'Dados ainda não salvos'}</p>}
         {saveError && <div role="alert" className="rounded-lg border border-rose-500/30 p-3 text-sm text-rose-300">{saveError}<button onClick={() => { setSavingData(true); saveUserData().then(() => setSaveError(null)).catch((error) => setSaveError(error.message)).finally(() => setSavingData(false)); }} className="ml-3 underline">Tentar salvar novamente</button></div>}
         {providerSyncError && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{providerSyncError}</p>}
@@ -526,11 +533,14 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         <HomeActivity data={planning} transactions={classifiedTransactions} privateMode={isPrivateMode} onNavigate={navigateToTab} onCards={() => { setAccountsView('cards'); navigateToTab('accounts'); }}/>
         {providerBankAccounts.length > 0 && <BalanceEvolution accounts={providerBankAccounts} transactions={history.allTransactions} isPrivateMode={isPrivateMode} snapshots={history.snapshots}/>}
         {/* 1. Core Performance & Gains Dashboard (Diário, Semanal, Mensal, YTD) */}
-        <details className="market-preview rounded-2xl border border-slate-800 bg-slate-900/40">
+        <details id="market-quotes" open={marketChartOpen} onToggle={event => setMarketChartOpen(event.currentTarget.open)} className="scroll-mt-20 market-preview rounded-2xl border border-slate-800 bg-slate-900/40">
           <summary className="flex cursor-pointer items-center justify-between gap-3 p-5 text-sm font-medium text-slate-300">Cotações do mercado <span className="text-xs font-normal text-slate-500">Abrir gráfico +</span></summary>
           <div className="px-4 pb-4"><GainsPerformanceCard
             holdings={holdings}
             connectedInvestments={providerInvestments}
+            priceRules={planning.priceAlerts || []}
+            onPriceRulesChange={(rules) => setPlanning(old => ({ ...old, priceAlerts: rules }))}
+            priceMonitor={priceMonitor}
             onManageHoldings={() => navigateToTab('portfolio')}
             isPrivateMode={isPrivateMode}
             assets={assets}

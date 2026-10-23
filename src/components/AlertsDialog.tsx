@@ -39,7 +39,7 @@ export function AlertsDialog({ open, alerts, privateMode, onClose, onSelect }: {
         {alerts.map((alert) => <button key={alert.id} type="button" onClick={() => onSelect(alert)} className="w-full break-words rounded-xl border border-white/10 p-4 text-left hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400">
           <span className={`block text-sm font-medium ${alert.severity === 'warning' ? 'text-amber-200' : 'text-white'}`}>{alert.title}</span>
           <span className="mt-2 block text-xs leading-relaxed text-slate-400">{privateMode ? 'Detalhes ocultos no modo privacidade.' : alert.detail}</span>
-          <span className="mt-2 block text-xs text-rose-300">Conferir no planejamento →</span>
+          <span className="mt-2 block text-xs text-rose-300">{alert.target === 'market' ? 'Conferir ativo →' : 'Conferir no planejamento →'}</span>
         </button>)}
       </div>
       <div className="shrink-0 border-t border-white/10 p-4"><button type="button" onClick={onClose} className="w-full rounded-xl bg-rose-500 px-4 py-3 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">Continuar para o FinPulse</button></div>

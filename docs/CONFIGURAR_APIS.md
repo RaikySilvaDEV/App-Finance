@@ -55,3 +55,12 @@ Os avisos usam as contas/parcelas e empréstimos manuais cadastrados, com vencim
 - https://brapi.dev/docs/fiis/dividendos
 - https://resend.com/docs/send-with-nodejs
 - https://resend.com/docs/api-reference/emails/send-email
+
+
+## Alertas de queda por ativo
+
+Em **Visão geral → Cotações do mercado → Alertas de queda**, selecione uma posição manual, informe uma queda de 0,1% a 99% sobre o preço médio e ative. Nenhuma margem é ativada por padrão. A regra usa o salvamento da conta do FinPulse e pode ser alterada, pausada ou removida.
+
+O monitor consulta `/api/market/quote/:ticker` a cada cinco minutos enquanto o app estiver aberto e visível, e ao recuperar o foco. O preço de referência é calculado sobre o custo e a quantidade atuais das posições manuais do mesmo ticker. A referência em reais é arredondada para baixo em centavos. Apenas cotações BRL com data válida e até 36 horas são usadas para disparar avisos; valores antigos, sem data, sem custo ou indisponíveis têm status separado. O sistema não reconstrói a posição histórica.
+
+O aviso aparece no gráfico, no painel e na central de avisos. Ele registra a data e a fonte da cotação. Consulte a corretora antes de decidir: a API pode ter atraso. Não há acompanhamento com o app fechado, notificação por e-mail/push, envio de ordens, integração de negociação ou promessa de melhor momento para vender.

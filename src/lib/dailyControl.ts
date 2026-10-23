@@ -34,7 +34,7 @@ export function commitments(data: PlanningData) {
   const loans = data.manualLoans.filter((loan) => !loan.alsoConnected && loan.remaining > 0 && loan.installment > 0 && loan.nextDue && !bills.some((bill) => bill.date === loan.nextDue && Math.abs(bill.amount - loan.installment) < .01 && normalizedText(bill.bank) === normalizedText(loan.bank))).map((loan) => ({ id: `loan:${loan.id}`, title: loan.title, bank: loan.bank, date: loan.nextDue, amount: loan.installment, paid: false, source: 'Próxima parcela manual' }));
   return [...bills, ...loans].sort((a, b) => a.date.localeCompare(b.date));
 }
-export type DailyAlert = { id: string; title: string; detail: string; severity: 'warning' | 'info'; target: 'bills' | 'budgets' | 'connections' | 'recurring' | 'loans'; month?: string };
+export type DailyAlert = { id: string; title: string; detail: string; severity: 'warning' | 'info'; target: 'bills' | 'budgets' | 'connections' | 'recurring' | 'loans' | 'market'; month?: string };
 export function dailyAlerts(data: PlanningData, transactions: ClassifiedTransaction[], connections: any[], today = brazilDay(), loans: any[] = []): DailyAlert[] {
   const alerts: DailyAlert[] = [];
   const money = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
