@@ -39,7 +39,7 @@ export function Header({ isPrivateMode, setIsPrivateMode, onSyncNow, isSyncing, 
   const iconButton = 'relative inline-flex h-10 w-10 min-[375px]:h-11 min-[375px]:w-11 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400';
   const action = 'flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400';
   return <header className="sticky top-0 z-40 border-b border-white/5 bg-[#09090b]/95 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
-    <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-1 px-2 min-[375px]:gap-2 min-[375px]:px-3 sm:h-16 sm:px-6">
+    <div className="mx-auto flex h-14 max-w-[1680px] items-center justify-between gap-1 px-2 min-[375px]:gap-2 min-[375px]:px-3 sm:h-16 sm:px-6">
       <div className="flex min-w-0 shrink-0 items-center gap-1 min-[375px]:gap-2">
         <button type="button" onClick={onToggleSidebar} aria-label="Abrir menu" className={`${iconButton} lg:hidden`}><Menu className="h-5 w-5"/></button>
         <div className="flex items-center gap-1 min-[375px]:gap-2"><Layers aria-hidden="true" className="h-[18px] w-[18px] shrink-0 text-violet-400 min-[375px]:h-5 min-[375px]:w-5"/><span className="text-sm font-semibold tracking-tight text-white min-[375px]:text-base">FinPulse</span></div>

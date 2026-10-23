@@ -222,3 +222,14 @@ button:disabled { cursor: default; }
   .workspace-tabs > button { padding: 10px 12px; }
   .planning-tabs > button { flex: 1 0 auto; }
 }
+
+/* Keep desktop panels readable while using the available workspace. */
+.planning-summary-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.planning-summary-grid > * { min-width: 0; }
+@media (min-width: 1280px) {
+  .planning-summary-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .planning-summary-grid > p { grid-column: 1 / -1; }
+}
+@media (min-width: 1536px) {
+  .finpulse-workspace > div > main { padding-inline: 40px; }
+}

@@ -121,7 +121,6 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
   const inputClass = 'mt-1 block w-full rounded-xl border border-slate-700 bg-slate-900/50 p-2.5 text-sm text-slate-100';
 
   return <section className="space-y-5 text-slate-100" aria-label={mode === 'planning' ? 'Planejamento pessoal' : 'Meus cartões'}>
-    <header className="space-y-1"><p className="text-xs font-medium uppercase tracking-widest text-slate-500">FinPulse</p><h2 className="text-2xl font-semibold tracking-tight">{mode === 'planning' ? 'Planejamento pessoal' : 'Meus cartões'}</h2><p className="text-sm text-slate-400">{mode === 'planning' ? 'Organize despesas e previsões em um só lugar.' : 'Saldos reais dos cartões conectados, iguais aos da Visão geral.'}</p></header>
     {mode === 'cards' && <>
     <article className="overview-card">
       <div className="overview-card-heading">
@@ -169,7 +168,7 @@ export function PersonalBudgetPanel({ privateMode = false, itemIds = [], cards =
     </div>
 
     </>}
-    {mode === 'planning' && <div className="space-y-4">
+    {mode === 'planning' && <div className="planning-summary-grid">
       <section className="rounded-3xl border border-white/[0.07] bg-gradient-to-br from-slate-900/90 to-slate-950/60 p-4 sm:p-5" aria-label="Resumo do planejamento">
         <div className="flex items-center justify-between gap-3">
           <div><p className="text-[11px] font-medium uppercase tracking-[0.15em] text-slate-500">Seu planejamento</p><h3 className="mt-1 text-lg font-semibold tracking-tight">Visão do mês</h3></div>

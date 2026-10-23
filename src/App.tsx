@@ -461,7 +461,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
   const showDataSkeleton = menuTransitioning || (initialDataLoading && ['overview', 'accounts', 'assets', 'ledger', 'loans', 'planning'].includes(activeTab)) || (activeTab === 'market' && isSyncing && assets.length === 0);
 
   return (
-    <div className="finpulse-workspace min-h-screen bg-[#09090b] text-slate-100 flex flex-col font-['Plus_Jakarta_Sans',sans-serif] selection:bg-violet-500/20 selection:text-violet-300">
+    <div className="finpulse-workspace min-h-dvh bg-[#09090b] text-slate-100 flex flex-col font-['Plus_Jakarta_Sans',sans-serif] selection:bg-violet-500/20 selection:text-violet-300">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-24 right-3 left-3 z-50 flex items-center space-x-2.5 rounded-xl border border-emerald-500/50 bg-emerald-950/95 px-4 py-3 text-xs font-medium text-emerald-200 shadow-2xl backdrop-blur-md animate-fade-in sm:bottom-5 sm:left-auto sm:right-5 sm:max-w-sm">
@@ -488,7 +488,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         onLogout={() => void logoutSafely()}
       />
 
-      <div className="mx-auto flex w-full max-w-[1440px] flex-1">
+      <div className="mx-auto flex w-full max-w-[1680px] flex-1">
         <Sidebar
           open={isSidebarOpen}
           activeTab={activeTab}
@@ -501,7 +501,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         />
       {/* Main Content Area */}
       <main data-view={activeTab} id="overview" aria-busy={showDataSkeleton} className="min-w-0 flex-1 w-full px-4 pt-5 pb-24 sm:px-6 lg:px-7 lg:py-8 space-y-6">
-        <div className="workspace-title"><p className="workspace-eyebrow">FINPULSE / {{ overview: 'SEU DIA FINANCEIRO', accounts: 'SUAS INSTITUIÇÕES', ledger: 'MOVIMENTAÇÕES', planning: 'SEUS PLANOS' }[activeTab as string] || 'SEU ESPAÇO FINANCEIRO'}</p><h1 className="text-2xl font-semibold tracking-tight text-white">{{ overview: 'Visão geral', accounts: 'Contas e cartões', assets: 'Ativos', ledger: 'Fluxo de caixa', market: 'Mercado', portfolio: 'Posições manuais', loans: 'Empréstimos', connections: 'Conexões', planning: 'Planejamento', learn: 'Aprender' }[activeTab]}</h1><SectionInfo title="Sobre esta seção">{{ overview: 'Suas finanças conectadas e cadastradas manualmente.', accounts: 'Saldos bancários, cartões e limites.', assets: 'Seus investimentos conectados, organizados por classe ou instituição.', ledger: 'Acompanhe entradas, despesas e movimentações.', market: 'Indicadores e oportunidades de investimento.', portfolio: 'Acompanhe os ativos que você cadastrou.', loans: 'Empréstimos conectados e valores cadastrados por você.', connections: 'Suas instituições, atualizações e autorizações.', planning: 'Orçamento, compromissos, metas e histórico, salvos na sua conta.', learn: 'Aulas, simulador e conceitos para aprender no seu ritmo.' }[activeTab]}</SectionInfo></div>
+        <div className="workspace-title"><p className="workspace-eyebrow">FINPULSE / {{ overview: 'SEU DIA FINANCEIRO', accounts: 'SUAS INSTITUIÇÕES', ledger: 'MOVIMENTAÇÕES', planning: 'SEUS PLANOS' }[activeTab as string] || 'SEU ESPAÇO FINANCEIRO'}</p><h1 className="text-2xl font-semibold tracking-tight text-white">{{ overview: 'Visão geral', accounts: 'Contas e cartões', assets: 'Ativos', ledger: 'Fluxo de caixa', market: 'Mercado', portfolio: 'Posições manuais', loans: 'Empréstimos', connections: 'Conexões', planning: 'Planejamento', 'personal-budget': 'Meu dinheiro', learn: 'Aprender' }[activeTab]}</h1><SectionInfo title="Sobre esta seção">{{ overview: 'Suas finanças conectadas e cadastradas manualmente.', accounts: 'Saldos bancários, cartões e limites.', assets: 'Seus investimentos conectados, organizados por classe ou instituição.', ledger: 'Acompanhe entradas, despesas e movimentações.', market: 'Indicadores e oportunidades de investimento.', portfolio: 'Acompanhe os ativos que você cadastrou.', loans: 'Empréstimos conectados e valores cadastrados por você.', connections: 'Suas instituições, atualizações e autorizações.', planning: 'Orçamento, compromissos, metas e histórico, salvos na sua conta.', 'personal-budget': 'Seus cartões conectados, faturas e vencimentos.', learn: 'Aulas, simulador e conceitos para aprender no seu ritmo.' }[activeTab]}</SectionInfo></div>
         {(savingData || saveError) && <p role="status" className="text-xs text-slate-500">{savingData ? 'Salvando seus dados…' : 'Dados ainda não salvos'}</p>}
         {saveError && <div role="alert" className="rounded-lg border border-rose-500/30 p-3 text-sm text-rose-300">{saveError}<button onClick={() => { setSavingData(true); saveUserData().then(() => setSaveError(null)).catch((error) => setSaveError(error.message)).finally(() => setSavingData(false)); }} className="ml-3 underline">Tentar salvar novamente</button></div>}
         {providerSyncError && <p role="alert" className="rounded-xl border border-amber-500/20 p-3 text-xs text-amber-200">{providerSyncError}</p>}
