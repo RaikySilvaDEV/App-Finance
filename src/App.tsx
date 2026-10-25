@@ -37,6 +37,7 @@ import { ConnectionsSection } from './components/ConnectionsSection';
 import { BalanceEvolution } from './components/BalanceEvolution';
 import { HomeActivity, HomeShortcuts } from './components/HomeActivity';
 import { FinancialOverview } from './components/FinancialOverview';
+import { PersonalCashPlan } from './components/PersonalCashPlan';
 import { PersonalBudgetPanel } from './components/PersonalBudgetPanel';
 import { PlanningSection, ManualLoansPanel } from './components/PlanningSection';
 import { emptyPlanning, classifyTransactions } from './lib/planning';
@@ -525,7 +526,7 @@ function FinanceApp({ initialState, email, onLogout }: { initialState: SavedStat
         {showDataSkeleton ? <DataSkeleton label={menuTransitioning ? 'Abrindo seção…' : 'Carregando seus dados financeiros…'} variant={activeTab === 'overview' ? 'overview' : activeTab === 'connections' ? 'connections' : activeTab === 'ledger' || activeTab === 'planning' ? 'ledger' : 'list'}/> : <div key={activeTab} className="menu-content space-y-6">
         {activeTab === 'learn' && <InvestmentAcademySection selicRateAnnual={realIndicators?.selic.metaAnnualPct} cdiRateAnnual={realIndicators?.cdi.annualizedPct}/>}
         {activeTab === 'personal-budget' && <PersonalBudgetPanel mode="cards" privateMode={isPrivateMode} itemIds={pluggyItemIds} cards={creditCards} accounts={bankAccounts} onOpenCards={() => { setAccountsView('cards'); navigateToTab('accounts'); }}/>}
-        {activeTab === 'planning' && <><PersonalBudgetPanel mode="planning" privateMode={isPrivateMode} itemIds={pluggyItemIds}/><PlanningSection data={planning} onChange={setPlanning} transactions={classifiedTransactions} privateMode={isPrivateMode} history={history} controls={controlView} onConnections={() => navigateToTab('connections')} onLoans={() => navigateToTab('loans')}/></>}
+        {activeTab === 'planning' && <><PersonalCashPlan data={planning} onChange={setPlanning} privateMode={isPrivateMode}/><PlanningSection data={planning} onChange={setPlanning} transactions={classifiedTransactions} privateMode={isPrivateMode} history={history} controls={controlView} onConnections={() => navigateToTab('connections')} onLoans={() => navigateToTab('loans')}/></>}
         {activeTab === 'overview' && (!pluggyItemIds.length && !bankAccounts.length && !creditCards.length && !holdings.length && !planning.manualCards?.length ? <FirstBankSetup onConnect={() => { setReconnectItem(undefined); setIsOpenFinanceConsentOpen(true); }} onManual={() => navigateToTab('accounts')} onPlanning={() => navigateToTab('planning')}/> : <>
         <HomeShortcuts onNavigate={navigateToTab} onCards={() => { setAccountsView('cards'); navigateToTab('accounts'); }}/>
         <MoneyAvailable accounts={bankAccounts} cards={creditCards} investments={providerInvestments} loans={loans} data={planning} privateMode={isPrivateMode}/>

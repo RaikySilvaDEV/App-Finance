@@ -153,7 +153,7 @@ function safeState(value: any, previousPlanning?: ReturnType<typeof validatePlan
   // server-owned saved metadata when it omits them while editing a commitment.
   if (planning && previousPlanning && typeof planning === 'object' && !Array.isArray(planning)) {
     const previousBills = new Map((previousPlanning.bills || []).map((bill) => [bill.id, bill]));
-    planning = { ...planning, cardSchedules: planning.cardSchedules === undefined ? previousPlanning.cardSchedules || [] : planning.cardSchedules, priceAlerts: planning.priceAlerts === undefined ? previousPlanning.priceAlerts || [] : planning.priceAlerts, manualCards: planning.manualCards === undefined ? previousPlanning.manualCards || [] : planning.manualCards,
+    planning = { ...planning, monthlyCashPlan: planning.monthlyCashPlan === undefined ? previousPlanning.monthlyCashPlan : planning.monthlyCashPlan, cardSchedules: planning.cardSchedules === undefined ? previousPlanning.cardSchedules || [] : planning.cardSchedules, priceAlerts: planning.priceAlerts === undefined ? previousPlanning.priceAlerts || [] : planning.priceAlerts, manualCards: planning.manualCards === undefined ? previousPlanning.manualCards || [] : planning.manualCards,
       bills: Array.isArray(planning.bills) ? planning.bills.map((bill: any) => {
         if (!bill || typeof bill !== 'object') return bill;
         const previous = previousBills.get(bill.id);
