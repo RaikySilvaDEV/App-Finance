@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, Building2, CreditCard, Landmark, ReceiptText, Wallet } from 'lucide-react';
+import type { ConnectedCardSchedule } from '../lib/planning';
 import type { BankAccount } from '../types/finance';
 import { BankLogo } from './BankLogo';
 import { BankBills } from './BankBills';
@@ -12,7 +13,9 @@ const tabs: { key: Tab; label: string; Icon: typeof Wallet }[] = [
   { key: 'bills', label: 'Faturas', Icon: ReceiptText },
 ];
 
-export function AccountsSection({ accounts, cards, itemIds, privateMode, onRemove, manualTools, cardTools, initialTab = 'accounts' }: {
+export function AccountsSection({ accounts, cards, itemIds, privateMode, onRemove, manualTools, cardTools, initialTab = 'accounts', cardSchedules, onCardSchedulesChange }: {
+  cardSchedules?: ConnectedCardSchedule[];
+  onCardSchedulesChange?: (schedules: ConnectedCardSchedule[]) => void;
   manualTools?: React.ReactNode;
   cardTools?: React.ReactNode;
   accounts: BankAccount[];
@@ -70,7 +73,7 @@ export function AccountsSection({ accounts, cards, itemIds, privateMode, onRemov
     </div>}
     {tab === 'cards' && <div id="finance-panel-cards" role="tabpanel" aria-labelledby="finance-tab-cards" className="space-y-5">
       {(!!cards.length || !!(cardTools)) && cardTools}
-      {!!cards.length && <div className="space-y-3"><h3 className="px-1 text-xs font-semibold text-slate-300">Cartões conectados</h3><ConnectedAssets section="cards" accounts={accounts} investments={[]} creditCards={cards} isPrivateMode={privateMode}/></div>}
+      {!!cards.length && <div className="space-y-3"><h3 className="px-1 text-xs font-semibold text-slate-300">Cartões conectados</h3><ConnectedAssets cardSchedules={cardSchedules} onCardSchedulesChange={onCardSchedulesChange} section="cards" accounts={accounts} investments={[]} creditCards={cards} isPrivateMode={privateMode}/></div>}
     </div>}
     {tab === 'bills' && <div id="finance-panel-bills" role="tabpanel" aria-labelledby="finance-tab-bills"><BankBills itemIds={itemIds} privateMode={privateMode}/></div>}
   </section>;

@@ -10,8 +10,9 @@ export type Bill = { id: string; title: string; bank: string; category: string; 
 export type ManualCard = { id: string; name: string; bank: string; lastFour: string; closingDay: number; dueDay: number; creditLimit: number | null; availableLimit: number | null; active: boolean; updatedAt: string };
 export type Goal = { id: string; name: string; target: number; saved: number; targetDate: string };
 export type ManualLoan = { id: string; bank: string; title: string; outstanding: number; installment: number; remaining: number; nextDue: string; alsoConnected: boolean; updatedAt: string };
+export type ConnectedCardSchedule = { accountId: string; closingDay: number; dueDay: number };
 export type PriceAlertRule = { ticker: string; dropPct: number; enabled: boolean };
-export type PlanningData = { budgets: Budget[]; bills: Bill[]; goals: Goal[]; manualLoans: ManualLoan[]; manualCards?: ManualCard[]; priceAlerts?: PriceAlertRule[]; rules: CategoryRule[]; overrides: Record<string, MovementOverride>; recurrenceDecisions?: Record<string, 'ignored' | 'confirmed'> };
+export type PlanningData = { budgets: Budget[]; bills: Bill[]; goals: Goal[]; manualLoans: ManualLoan[]; manualCards?: ManualCard[]; priceAlerts?: PriceAlertRule[]; cardSchedules?: ConnectedCardSchedule[]; rules: CategoryRule[]; overrides: Record<string, MovementOverride>; recurrenceDecisions?: Record<string, 'ignored' | 'confirmed'> };
 export const emptyPlanning = (): PlanningData => ({ budgets: [], bills: [], goals: [], manualLoans: [], rules: [], overrides: {} });
 export const normalizedText = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 export function brazilDay(value = new Date().toISOString()) {
@@ -83,7 +84,10 @@ export function validatePlanning(value: unknown): PlanningData {
   if (!data.bills.every((bill) => !bill.cardId || (bill.installments <= 120 && bill.amount <= 1e9 && Math.abs(bill.amount * 100 - Math.round(bill.amount * 100)) < .0001))) throw new Error('Parcela de cartão inválida. Use até 120 parcelas e valores em centavos.');
   const priceAlerts = data.priceAlerts || [];
   if (!Array.isArray(priceAlerts) || priceAlerts.length > 1000 || new Set(priceAlerts.map(row => row?.ticker)).size !== priceAlerts.length || !priceAlerts.every(row => row && typeof row.ticker === 'string' && /^[A-Z0-9.^-]{1,15}$/.test(row.ticker) && typeof row.dropPct === 'number' && Number.isFinite(row.dropPct) && row.dropPct >= 0.1 && row.dropPct <= 99 && typeof row.enabled === 'boolean')) throw new Error('Alerta de cotação inválido. Use uma margem entre 0,1% e 99%.');
+  const cardSchedules = data.cardSchedules || [];
+  if (!Array.isArray(cardSchedules) || cardSchedules.length > 100 || new Set(cardSchedules.map(row => row?.accountId)).size !== cardSchedules.length || !cardSchedules.every(row => row && typeof row.accountId === 'string' && /^[0-9a-f-]{36}$/i.test(row.accountId) && Number.isInteger(row.closingDay) && row.closingDay >= 1 && row.closingDay <= 31 && Number.isInteger(row.dueDay) && row.dueDay >= 1 && row.dueDay <= 31)) throw new Error('Datas do cartão inválidas. Use dias entre 1 e 31.');
+  const safeSchedules = cardSchedules.map(({ accountId, closingDay, dueDay }) => ({ accountId, closingDay, dueDay }));
   const safePriceAlerts = priceAlerts.map(({ ticker, dropPct, enabled }) => ({ ticker, dropPct, enabled }));
   const safeCards = manualCards.map(({ id, name, bank, lastFour, closingDay, dueDay, creditLimit, availableLimit, active, updatedAt }) => ({ id, name: name.trim(), bank: bank.trim(), lastFour, closingDay, dueDay, creditLimit, availableLimit, active, updatedAt }));
-  return { budgets: data.budgets, bills: data.bills, goals: data.goals, manualLoans: data.manualLoans, manualCards: safeCards, priceAlerts: safePriceAlerts, rules: data.rules, overrides: data.overrides, recurrenceDecisions: decisions };
+  return { budgets: data.budgets, bills: data.bills, goals: data.goals, manualLoans: data.manualLoans, manualCards: safeCards, priceAlerts: safePriceAlerts, cardSchedules: safeSchedules, rules: data.rules, overrides: data.overrides, recurrenceDecisions: decisions };
 }

@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { finiteValue } from '../lib/productMapping';
-import { brazilDay } from '../lib/planning';
+import { brazilDay, type ConnectedCardSchedule } from '../lib/planning';
 import type { BillPaymentStatus } from '../lib/billStatus';
 
 type Card = {
@@ -31,12 +31,13 @@ function chooseCycle(bills: Bill[], due: string) {
   return sameCycle?.id || candidates.filter(bill => calendarDay(bill.dueDate) >= monthStart).sort((a, b) => calendarDay(b.dueDate).localeCompare(calendarDay(a.dueDate)))[0]?.id || '';
 }
 
-export function ConnectedCardDetails({ card, privateMode }: { card: Card; privateMode: boolean }) {
+export function ConnectedCardDetails({ card, privateMode, schedule, onScheduleChange }: { card: Card; privateMode: boolean; schedule?: ConnectedCardSchedule; onScheduleChange?: (schedule: ConnectedCardSchedule | null) => void }) {
   const [open, setOpen] = useState(false);
   const [version, setVersion] = useState(0);
   const [data, setData] = useState<{ bills: Bill[]; unavailable: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [scheduleError, setScheduleError] = useState('');
   const [selectedId, setSelectedId] = useState('');
   const selectId = useId();
   const credit = card.creditData || {};
@@ -78,8 +79,8 @@ export function ConnectedCardDetails({ card, privateMode }: { card: Card; privat
     <summary className="cursor-pointer">Fatura, vencimento e limites</summary>
     <div className="mt-3 space-y-4 border-t border-white/[0.06] pt-4">
       <dl className="grid grid-cols-2 gap-4 text-xs">
-        <div className="min-w-0"><dt className="text-slate-500">Vencimento da fatura atual</dt><dd className="mt-1 text-slate-200">{currentDue ? date(currentDue) : 'Não disponibilizado'}</dd></div>
-        <div className="min-w-0"><dt className="text-slate-500">Fechamento informado</dt><dd className="mt-1 text-slate-200">{calendarDay(credit.balanceCloseDate) ? date(credit.balanceCloseDate) : 'Não fornecido pelo banco'}</dd></div>
+        <div className="min-w-0"><dt className="text-slate-500">{schedule ? 'Vencimento · informado por você' : 'Vencimento da fatura atual'}</dt><dd className="mt-1 text-slate-200">{schedule ? `Todo dia ${schedule.dueDay}` : currentDue ? date(currentDue) : 'Não disponibilizado'}</dd></div>
+        <div className="min-w-0"><dt className="text-slate-500">{schedule ? 'Fechamento · informado por você' : 'Fechamento informado'}</dt><dd className="mt-1 text-slate-200">{schedule ? `Todo dia ${schedule.closingDay}` : calendarDay(credit.balanceCloseDate) ? date(credit.balanceCloseDate) : 'Não fornecido pela conexão'}</dd></div>
         <div className="min-w-0"><dt className="text-slate-500">Limite total</dt><dd className="mt-1 break-words text-slate-200">{money(limit, card.currencyCode)}</dd></div>
         <div className="min-w-0"><dt className="text-slate-500">Limite utilizado · calculado</dt><dd className="mt-1 break-words text-slate-200">{money(used, card.currencyCode)}</dd></div>
       </dl>
@@ -101,6 +102,20 @@ export function ConnectedCardDetails({ card, privateMode }: { card: Card; privat
         </div></details>}
 
       </div>
+      {onScheduleChange && <details className="border-t border-white/[0.06] pt-3"><summary className="cursor-pointer text-xs text-slate-400">Ajustar fechamento e vencimento</summary>
+        <form key={`${card.id}:${schedule?.closingDay || ''}:${schedule?.dueDay || ''}`} className="mt-3 space-y-3" onSubmit={event => {
+          event.preventDefault(); setScheduleError('');
+          const fields = new FormData(event.currentTarget);
+          const closingDay = Number(fields.get('closingDay')), dueDay = Number(fields.get('dueDay'));
+          if (![closingDay, dueDay].every(day => Number.isInteger(day) && day >= 1 && day <= 31)) { setScheduleError('Informe dias entre 1 e 31.'); return; }
+          onScheduleChange({ accountId: card.id, closingDay, dueDay });
+        }}>
+          <p className="text-[11px] leading-relaxed text-slate-500">Datas recorrentes informadas por você. O valor e o vencimento de cada fatura retornada pelo banco continuam identificados no respectivo ciclo.</p>
+          <div className="grid grid-cols-2 gap-3"><label className="text-[11px] text-slate-500">Dia de fechamento<input name="closingDay" type="number" min="1" max="31" step="1" required disabled={privateMode} defaultValue={schedule?.closingDay ?? ''} className="mt-1 min-h-10 w-full rounded-lg border border-white/10 bg-[#101012] px-3 text-xs text-slate-200"/></label><label className="text-[11px] text-slate-500">Dia de vencimento<input name="dueDay" type="number" min="1" max="31" step="1" required disabled={privateMode} defaultValue={schedule?.dueDay ?? ''} className="mt-1 min-h-10 w-full rounded-lg border border-white/10 bg-[#101012] px-3 text-xs text-slate-200"/></label></div>
+          {scheduleError && <p role="alert" className="text-xs text-amber-200">{scheduleError}</p>}
+          <div className="flex flex-wrap gap-4"><button type="submit" disabled={privateMode} className="min-h-10 text-xs font-medium text-rose-300 disabled:opacity-50">Salvar datas</button>{schedule && <button type="button" disabled={privateMode} onClick={() => onScheduleChange(null)} className="min-h-10 text-xs text-slate-500 disabled:opacity-50">Usar somente datas da conexão</button>}</div>
+        </form>
+      </details>}
       {card.updatedAt && Number.isFinite(Date.parse(card.updatedAt)) && <p className="text-[10px] text-slate-500">Dados do cartão: {new Date(card.updatedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</p>}
     </div>
   </details>;
