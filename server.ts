@@ -195,11 +195,15 @@ app.get('/api/open-finance/connections', async (req, res) => {
 
 app.get('/api/open-finance/bills', async (req, res) => {
   const ids = (Array.isArray(req.query.itemId) ? req.query.itemId : req.query.itemId ? [req.query.itemId] : []).map(String).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  const accountId = req.query.accountId;
+  if (accountId !== undefined && (typeof accountId !== 'string' || !/^[0-9a-f-]{36}$/i.test(accountId))) return res.status(400).json({ error: 'Cartão inválido.' });
   try {
     const { accounts, creditCards, unavailableItems } = await readAccounts(ids);
+    const selectedCards = accountId ? creditCards.filter(card => card.id === accountId) : creditCards;
+    if (accountId && !selectedCards.length) return res.status(unavailableItems.length ? 503 : 404).json({ error: 'Não foi possível consultar este cartão nas suas conexões.' });
     const bills: any[] = []; let unavailable = unavailableItems?.length || 0;
     const incompleteAccounts: string[] = [];
-    await Promise.all(creditCards.map(async (card) => {
+    await Promise.all(selectedCards.map(async (card) => {
       try {
         let page = 1, total = 1;
         do {

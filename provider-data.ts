@@ -20,7 +20,7 @@ export async function readAccounts(ids: string[]) {
       const connector = item.connector || {};
       for (const account of [ ...(firstPage.results || []), ...pages.flatMap((page: any) => page.results || []) ]) {
         if (account.type === 'CREDIT') {
-          creditCards.push({ id: account.id, providerItemId: itemId, name: account.marketingName || account.name || 'Cartão', number: String(account.number || '').slice(-4), currencyCode: account.currencyCode || 'BRL', balance: account.balance, creditData: account.creditData || {}, institution: connector.name });
+          creditCards.push({ id: account.id, providerItemId: itemId, name: account.marketingName || account.name || 'Cartão', number: String(account.number || '').slice(-4), currencyCode: account.currencyCode || 'BRL', balance: account.balance, creditData: account.creditData || {}, updatedAt: account.updatedAt || item.lastUpdatedAt || null, institution: connector.name });
         }
         if (account.type !== 'BANK') continue;
         const rawNumber = String(account.number || '');
