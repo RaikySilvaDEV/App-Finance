@@ -13,7 +13,13 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
   const [month, setMonth] = useState(() => installmentDate(currentMonth + '-01', 1).slice(0, 7));
   const [editing, setEditing] = useState(!data.monthlyCashPlan);
   const [error, setError] = useState('');
-  const plan = data.cashPlanMonths?.[month] || data.monthlyCashPlan;
+  const savedPlan = data.cashPlanMonths?.[month] || data.monthlyCashPlan;
+  const sundayDay = (occurrence: 2 | 4) => {
+    const firstDay = new Date(`${month}-01T12:00:00Z`).getUTCDay();
+    const firstSunday = 1 + ((7 - firstDay) % 7);
+    return firstSunday + 7 * (occurrence - 1);
+  };
+  const plan = savedPlan && { ...savedPlan, incomes: [...savedPlan.incomes, ...(savedPlan.sundayIncomes || []).map(row => ({ day: sundayDay(row.occurrence), amount: row.amount, additional: true }))].sort((a, b) => a.day - b.day) };
   const money = (amount: number) => privateMode ? '••••••' : amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const monthName = (value: string) => new Date(value + '-01T12:00:00Z').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
   const months = [...new Set([...Object.keys(data.cashPlanMonths || {}), ...Array.from({ length: 13 }, (_, index) => installmentDate(currentMonth + '-01', index).slice(0, 7))])].sort();
@@ -78,16 +84,13 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
         const optional = (key: string) => String(form.get(key) || '').trim() ? num(key) : null;
         try {
           const incomes = [{ day: num('firstDay'), amount: num('firstIncome') }, { day: num('secondDay'), amount: num('secondIncome') }];
-          [0, 1].forEach(index => {
-            const extraDay = String(form.get(`extraIncome${index}Day`) || '').trim();
-            const extraAmount = String(form.get(`extraIncome${index}Amount`) || '').trim();
-            if (Boolean(extraDay) !== Boolean(extraAmount)) throw new Error('Preencha a data e o valor de cada renda extra.');
-            if (extraDay && extraAmount) incomes.push({ day: Number(extraDay), amount: Number(extraAmount), additional: true });
+          const sundayIncomes = ([2, 4] as const).flatMap(occurrence => {
+            const value = String(form.get(`sundayIncome${occurrence}`) || '').trim();
+            return value ? [{ occurrence, amount: Number(value) }] : [];
           });
-          incomes.sort((a, b) => a.day - b.day);
           const fixedExpenses = [{ id: 'utilities', title: 'Água e luz', day: num('utilitiesDay'), amount: num('utilities') }, { id: 'internet', title: 'Internet residencial', day: num('internetDay'), amount: num('internet') }, { id: 'mobile', title: 'Internet celular', day: num('mobileDay'), amount: num('mobile') }];
           const cardPayments: CardPaymentForecast[] = cardOptions.map((card, index) => ({ accountId: card.id, cardName: card.title, amount: optional(`cardAmount${index}`), dueDay: optional(`cardDay${index}`), paymentDay: optional(`cardPaymentDay${index}`), kind: form.get(`cardKind${index}`) === 'confirmed' ? 'confirmed' : 'estimate' }));
-          const monthlyCashPlan = validateMonthlyCashPlan({ incomes, fixedExpenses, groceries: num('groceries'), fuel: num('fuel'), buffer: num('buffer'), cardPayments });
+          const monthlyCashPlan = validateMonthlyCashPlan({ incomes, sundayIncomes, fixedExpenses, groceries: num('groceries'), fuel: num('fuel'), buffer: num('buffer'), cardPayments });
           // Month edits never rewrite another month's saved forecast or carry card amounts forward.
           const { cardPayments: _cards, ...defaultLimits } = monthlyCashPlan;
           onChange({ ...data, monthlyCashPlan: data.monthlyCashPlan || defaultLimits, cashPlanMonths: { ...(data.cashPlanMonths || {}), [month]: monthlyCashPlan } });
@@ -105,7 +108,7 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
         })}<p className="text-[11px] text-slate-600">Informe quanto pretende pagar neste mês. Esse valor pode ser parcial; não é necessariamente o total da fatura e não registra um pagamento no banco.</p></fieldset>}
         <details className="group rounded-xl border border-white/[0.06] px-4" open={!plan}><summary className="min-h-11 cursor-pointer py-3 text-xs text-slate-400">Renda e despesas variáveis</summary><div className="space-y-4 pb-4">
           <div className="grid gap-3 sm:grid-cols-2">{[0, 1].map(index => { const regular = plan?.incomes.filter(income => !income.additional)[index]; return <fieldset key={index} className="grid grid-cols-[1fr_2fr] gap-3"><legend className="mb-2 text-[11px] text-slate-500">{index + 1}º recebimento</legend><label className="text-xs text-slate-400">Dia<input className={input} name={index ? 'secondDay' : 'firstDay'} type="number" min="1" max="31" step="1" required defaultValue={regular?.day ?? (index ? 20 : 5)}/></label><label className="text-xs text-slate-400">Valor líquido (R$)<input className={input} name={index ? 'secondIncome' : 'firstIncome'} type="number" min="0.01" max="1000000000000" step="0.01" required defaultValue={regular?.amount ?? ''}/></label></fieldset>})}</div>
-          <fieldset className="grid gap-3 rounded-xl border border-white/[0.05] p-3 sm:grid-cols-2"><legend className="px-1 text-[11px] text-slate-500">Rendas extras (opcional)</legend>{[0, 1].map(index => { const extra = plan?.incomes.filter(income => income.additional)[index]; return <div key={index} className="grid grid-cols-[1fr_2fr] gap-3"><label className="text-xs text-slate-400">Dia<input className={input} name={`extraIncome${index}Day`} type="number" min="1" max="31" step="1" defaultValue={extra?.day ?? ''} placeholder="Dia do recebimento"/></label><label className="text-xs text-slate-400">Valor líquido (R$)<input className={input} name={`extraIncome${index}Amount`} type="number" min="0.01" max="1000000000000" step="0.01" defaultValue={extra?.amount ?? ''} placeholder="Valor"/></label></div>})}</fieldset>
+          <fieldset className="grid gap-3 rounded-xl border border-white/[0.05] p-3 sm:grid-cols-2"><legend className="px-1 text-[11px] text-slate-500">Rendas extras de domingo</legend>{([2, 4] as const).map(occurrence => { const extra = plan?.sundayIncomes?.find(income => income.occurrence === occurrence); return <label key={occurrence} className="text-xs text-slate-400">{occurrence}º domingo · dia {sundayDay(occurrence)} (R$)<input className={input} name={`sundayIncome${occurrence}`} type="number" min="0" max="1000000000000" step="0.01" defaultValue={extra?.amount ?? ''} placeholder="Sem recebimento"/></label>})}</fieldset>
           <div className="grid gap-3 sm:grid-cols-3">{[['utilities', 'Água e luz', 5], ['internet', 'Internet residencial', 8], ['mobile', 'Internet celular', 20]].map(([id, title, defaultDay]) => {
             const row = plan?.fixedExpenses.find(row => row.id === id);
             return <fieldset key={id} className="space-y-2 rounded-lg border border-white/[0.05] p-3"><legend className="px-1 text-[11px] text-slate-500">{title}</legend><label className="block text-xs text-slate-400">Previsão mensal (R$)<input className={input} name={String(id)} type="number" min="0" max="1000000000000" step="0.01" required defaultValue={row?.amount ?? ''}/></label><label className="block text-xs text-slate-400">Vencimento · dia<input className={input} name={id + 'Day'} type="number" min="1" max="31" step="1" required defaultValue={row?.day ?? defaultDay}/></label></fieldset>;
