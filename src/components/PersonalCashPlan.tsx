@@ -67,7 +67,6 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
     const bank = accounts.find(account => account.providerItemId === card.providerItemId)?.bankName || (card.institution !== 'MeuPluggy' ? card.institution : '') || card.name || 'Cartão';
     return [card.id, { id: card.id, title: bankDisplayName(bank), number: card.number }] as const;
   }), ...(plan?.cardPayments || []).filter(row => !cards.some(card => card.id === row.accountId)).map(row => [row.accountId, { id: row.accountId, title: row.cardName, number: undefined }] as const)]).values()];
-  const carryTarget = cardOptions.find(card => normalizedText(card.title).includes('nubank'));
   const selectedBills = (bankBills || []).filter(bill => /^\d{4}-\d{2}-\d{2}/.test(String(bill.dueDate || '')) && String(bill.dueDate || '').slice(0, 7) === month && Number.isFinite(Number(bill.totalAmount)) && Number(bill.totalAmount) > 0 && (bill.totalAmountCurrencyCode || 'BRL') === 'BRL' && bill.paymentStatus !== 'paid').sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
   const isFuturePlan = (period: string, day?: number | null) => day != null && `${period}-${String(day).padStart(2, '0')}` >= brazilDay();
   const salaryDays = (plan?.incomes || []).filter(row => !row.additional).map(row => dayInMonth(row.day));
@@ -94,21 +93,13 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
     const eligible = salaryDays.filter(day => day <= dueDay).sort((a, b) => (paymentDateLoad.get(a) || 0) - (paymentDateLoad.get(b) || 0) || b - a);
     return eligible[0] ?? dueDay;
   };
-  const carryTargetPlan = plan?.cardPayments?.find(row => row.accountId === carryTarget?.id);
-  const carryTargetCard = cards.find(card => card.id === carryTarget?.id);
-  const carryDueDay = carryTargetPlan?.dueDay ?? data.cardSchedules?.find(row => row.accountId === carryTarget?.id)?.dueDay ?? Number(String(carryTargetCard?.creditData?.balanceDueDate || '').slice(8, 10));
-  const carryPaymentDay = carryTargetPlan?.paymentDay ?? (carryTargetCard && carryDueDay ? preferredDate(carryTargetCard, carryDueDay) : salaryDays[0]);
-  const carryPaymentRows = month === novemberPlanMonth && carryIn > 0 && carryTarget ? [{ id: 'carry-card-payment:' + carryTarget.id, title: `${carryTarget.title} · extra para quitar fatura`, day: dayInMonth(carryPaymentDay || salaryDays[0] || 1), amount: carryIn, status: 'Renda já recebida · reservada para o cartão' }] : [];
   const autoPayoffRows = month === payoffGoalMonth ? cards.flatMap(card => {
     const totalUsed = usedByCard.get(card.id) || 0;
     if (totalUsed <= 0) return [];
     const bank = cardOptions.find(option => option.id === card.id)?.title || 'Cartão';
     const beforeGoalPayments = Object.entries(data.cashPlanMonths || {}).filter(([value]) => value >= currentMonth && value < payoffGoalMonth).reduce((sum, [period, saved]) => {
       const scheduled = (saved.cardPayments || []).filter(row => row.accountId === card.id && row.amount != null && row.amount > 0 && isFuturePlan(period, row.paymentDay ?? row.dueDay)).reduce((subtotal, row) => subtotal + row.amount!, 0);
-      const targetPlan = saved.cardPayments?.find(row => row.accountId === card.id);
-      const carryDay = targetPlan?.paymentDay ?? targetPlan?.dueDay ?? data.cardSchedules?.find(row => row.accountId === card.id)?.dueDay;
-      const carriedPayment = period === novemberPlanMonth && carryTarget?.id === card.id && (saved.carryIn ?? 90) > 0 && isFuturePlan(period, carryDay) ? saved.carryIn ?? 90 : 0;
-      return sum + scheduled + carriedPayment;
+      return sum + scheduled;
     }, 0);
     const beforeGoalBills = allManualOccurrences.filter(row => !row.isPaid && row.date >= brazilDay() && row.date.slice(0, 7) >= currentMonth && row.date.slice(0, 7) < payoffGoalMonth && matchesCard(card, `${row.bank || ''} ${row.title}`)).reduce((sum, row) => sum + row.amount, 0);
     const amount = Math.max(0, totalUsed - beforeGoalPayments - beforeGoalBills);
@@ -139,9 +130,9 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
   const duplicateManualIds = new Set(selectedBills.flatMap(bill => manual.filter(row => normalizedText(row.category || '').includes('fatura') && normalizedText(row.bank || row.title) === normalizedText(bill.bank)).map(row => row.id)));
   const duplicatePayoffManualIds = new Set(month === payoffGoalMonth ? manual.filter(row => cards.some(card => matchesCard(card, `${row.bank || ''} ${row.title}`))).map(row => row.id) : []);
   const visibleManual = manual.filter(row => !duplicateManualIds.has(row.id) && !duplicatePayoffManualIds.has(row.id));
-  const payments = [...visibleManual, ...fixed, ...loans, ...invoiceRows, ...cardRows, ...carryPaymentRows, ...autoPayoffRows].map(row => ({ ...row, isPaid: (plan?.paidPayments || []).includes(row.id) || row.status.startsWith('Pago') })).sort((a, b) => a.day - b.day || a.title.localeCompare(b.title));
+  const payments = [...visibleManual, ...fixed, ...loans, ...invoiceRows, ...cardRows, ...autoPayoffRows].map(row => ({ ...row, isPaid: (plan?.paidPayments || []).includes(row.id) || row.status.startsWith('Pago') })).sort((a, b) => a.day - b.day || a.title.localeCompare(b.title));
   const trackedPayments = payments.filter(row => row.amount > 0);
-  const cardPaymentRows = trackedPayments.filter(row => /^(bank-bill:|card:|carry-card-payment:|payoff:)/.test(row.id));
+  const cardPaymentRows = trackedPayments.filter(row => /^(bank-bill:|card:|payoff:)/.test(row.id));
   const paidAmount = (rows: typeof trackedPayments) => rows.filter(row => row.isPaid).reduce((sum, row) => sum + row.amount, 0);
   const totalTracked = trackedPayments.reduce((sum, row) => sum + row.amount, 0);
   const totalPaid = paidAmount(trackedPayments);
@@ -169,10 +160,7 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
     .filter(([value]) => value >= currentMonth && value < payoffGoalMonth)
     .reduce((sum, [period, saved]) => {
       const scheduled = (saved.cardPayments || []).reduce((total, row) => total + (row.amount != null && row.amount > 0 && isFuturePlan(period, row.paymentDay ?? row.dueDay) ? row.amount : 0), 0);
-      const targetPlan = saved.cardPayments?.find(row => row.accountId === carryTarget?.id);
-      const carryDay = targetPlan?.paymentDay ?? targetPlan?.dueDay ?? data.cardSchedules?.find(row => row.accountId === carryTarget?.id)?.dueDay;
-      const carriedPayment = period === novemberPlanMonth && carryTarget && isFuturePlan(period, carryDay) ? saved.carryIn ?? 90 : 0;
-      return sum + scheduled + carriedPayment;
+      return sum + scheduled;
     }, 0);
   const manualCardPaymentsThroughMonth = allManualOccurrences.filter(row => !row.isPaid && row.date >= brazilDay() && row.date.slice(0, 7) >= currentMonth && row.date.slice(0, 7) < payoffGoalMonth && cards.some(card => matchesCard(card, `${row.bank || ''} ${row.title}`))).reduce((sum, row) => sum + row.amount, 0);
   const automaticPayoffTotal = autoPayoffRows.reduce((sum, row) => sum + row.amount, 0);
@@ -185,12 +173,11 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
     if (used <= 0 || bill?.paymentStatus === 'paid') return [];
     const payment = Math.max(0, planned?.amount ?? (Number(bill?.totalAmount) || 0));
     if (payment <= 0) return [];
-    const extraPayment = carryTarget?.id === card.id ? carryIn : 0;
-    const remainingAfterPayment = Math.max(0, used - payment - extraPayment);
+    const remainingAfterPayment = Math.max(0, used - payment);
     const dueDay = planned?.dueDay ?? data.cardSchedules?.find(row => row.accountId === card.id)?.dueDay ?? (Number(String(bill?.dueDate || '').slice(8, 10)) || Number(String(card.creditData?.balanceDueDate || '').slice(8, 10)) || 0);
     const suggestedDay = dueDay ? Math.min(planned?.paymentDay ?? dueDay, dueDay) : 0;
     const title = cardOptions.find(row => row.id === card.id)?.title || 'Cartão';
-    return [{ id: card.id, title, used, payment, extraPayment, remainingAfterPayment, suggestedDay }];
+    return [{ id: card.id, title, used, payment, remainingAfterPayment, suggestedDay }];
   }).filter(row => row.remainingAfterPayment > 0) : [];
   const input = 'mt-1 min-h-11 w-full rounded-lg border border-white/10 bg-[#101012] px-3 text-sm text-slate-200';
   return <section aria-label="Meu plano de pagamentos" className="space-y-5">
@@ -201,7 +188,7 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
     </div>
     {plan && <>
       <dl className="grid grid-cols-2 gap-5 rounded-2xl border border-[#242429] bg-[#101013] p-5 sm:grid-cols-3 sm:p-6">
-        <div><dt className="text-[11px] text-slate-500">Recebimentos previstos</dt><dd className="mt-2 text-xl font-semibold tracking-tight text-slate-200 tabular-nums">{money(income)}</dd>{carryIn > 0 && <p className="mt-1 text-[10px] text-slate-500">+ {money(carryIn)} trazidos de outubro, reservados ao Nubank</p>}</div>
+        <div><dt className="text-[11px] text-slate-500">Recebimentos previstos</dt><dd className="mt-2 text-xl font-semibold tracking-tight text-slate-200 tabular-nums">{money(income)}</dd>{carryIn > 0 && <p className="mt-1 text-[10px] text-slate-500">+ {money(carryIn)} trazidos de outubro para cobrir as contas</p>}</div>
         <div><dt className="text-[11px] text-slate-500">Separar neste mês</dt><dd className="mt-2 text-xl font-semibold tracking-tight text-slate-200 tabular-nums">{assigned > 0 ? money(assigned) : 'Sem despesas previstas'}</dd></div>
         <div className="col-span-2 border-t border-white/[0.05] pt-4 sm:col-span-1 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0"><dt className="text-[11px] text-slate-400">{remaining < 0 ? 'Falta no orçamento' : hasCardValues ? 'Após pagamentos previstos' : 'Para distribuir nos cartões'}</dt><dd className={`mt-2 text-2xl font-semibold tracking-tight tabular-nums ${remaining < 0 ? 'text-rose-300' : 'text-white'}`}>{remaining === 0 ? 'Tudo destinado' : money(remaining < 0 ? -remaining : remaining)}</dd></div>
       </dl>
@@ -213,7 +200,7 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
         <p className="border-t border-white/[0.05] pt-2 text-[10px] text-slate-600">Marque cada conta depois de pagar. A marcação fica salva no plano e não movimenta sua conta bancária.</p>
       </div>}
       {cardDebtTotal > 0 && <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-rose-400/15 bg-rose-400/[0.035] px-4 py-3 sm:px-5"><div className="min-w-0"><p className="text-xs font-medium text-slate-200">Meta: quitar os cartões até {monthName(payoffGoalMonth)}</p><p className="mt-1 text-[10px] leading-relaxed text-slate-500">Total comprometido pelo limite usado: {money(cardDebtTotal)} · pagamentos já previstos antes de dezembro: {money(cardPaymentsPlannedThroughMonth + manualCardPaymentsThroughMonth)}. Em dezembro, o saldo restante é calculado automaticamente.</p>{cardsMissingPayoffDate && <p className="mt-1 text-[10px] text-amber-200">Falta uma data de vencimento para programar a quitação de um cartão.</p>}</div><div className="flex shrink-0 items-center gap-3"><span className="text-right"><span className="block text-[10px] text-slate-500">Ainda falta programar</span><strong className="mt-0.5 block text-sm tabular-nums text-rose-200">{cardPayoffGap > 0 ? money(cardPayoffGap) : 'Meta coberta'}</strong></span><button type="button" onClick={() => setEditing(true)} className="min-h-10 rounded-lg border border-white/10 px-3 text-[11px] text-slate-300 hover:bg-white/5">Ajustar</button></div></div>}
-      {novemberCardRemainders.length > 0 && <div className="rounded-xl border border-white/[0.06] bg-[#101013] px-4 py-3 sm:px-5"><p className="text-xs font-medium text-slate-200">Depois dos pagamentos planejados em novembro</p><div className="mt-2 divide-y divide-white/[0.04]">{novemberCardRemainders.map(row => <div key={row.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 text-[11px]"><span className="text-slate-400">{row.title}: {money(row.used)} usado − {money(row.payment)} em novembro{row.extraPayment > 0 ? ` − ${money(row.extraPayment)} já recebido` : ''} = <strong className="text-slate-200">{money(row.remainingAfterPayment)} restantes</strong></span><span className="text-cyan-200">{row.suggestedDay ? `Quitar em ${String(row.suggestedDay).padStart(2, '0')}/12` : 'Defina o dia para quitar em dezembro'}</span></div>)}</div><p className="mt-1 text-[10px] text-slate-600">Estimativa baseada no limite usado e nos pagamentos planejados; o saldo real muda quando o banco atualizar após o pagamento.</p></div>}
+      {novemberCardRemainders.length > 0 && <div className="rounded-xl border border-white/[0.06] bg-[#101013] px-4 py-3 sm:px-5"><p className="text-xs font-medium text-slate-200">Depois dos pagamentos planejados em novembro</p><div className="mt-2 divide-y divide-white/[0.04]">{novemberCardRemainders.map(row => <div key={row.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 text-[11px]"><span className="text-slate-400">{row.title}: {money(row.used)} usado − {money(row.payment)} em novembro = <strong className="text-slate-200">{money(row.remainingAfterPayment)} restantes</strong></span><span className="text-cyan-200">{row.suggestedDay ? `Quitar em ${String(row.suggestedDay).padStart(2, '0')}/12` : 'Defina o dia para quitar em dezembro'}</span></div>)}</div><p className="mt-1 text-[10px] text-slate-600">Estimativa baseada no limite usado e nos pagamentos planejados; o saldo real muda quando o banco atualizar após o pagamento.</p></div>}
       <div className="rounded-2xl border border-white/[0.06] bg-[#101013] p-4 sm:p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div><h3 className="text-sm font-medium text-slate-200">Sua divisão por recebimento</h3><p className="mt-1 text-[11px] text-slate-500">O salário cobre as contas até a próxima entrada. Os domingos complementam o saldo.</p></div>
@@ -242,10 +229,10 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
         const flexibleRows = [{ title: 'Mercado e higiene', amount: grocery }, { title: 'Combustível', amount: fuel }, ...(buffer > 0 ? [{ title: 'Margem de segurança', amount: buffer }] : [])].filter(row => row.amount > 0);
         const itemRows = [...rows.map(row => ({ id: row.id, isPaid: row.isPaid, title: row.title, day: row.day, amount: row.amount, kind: row.status })), ...flexibleRows.map(row => ({ id: undefined, isPaid: false, ...row, day: undefined as number | undefined, kind: 'Separar deste recebimento' }))].filter(row => row.amount > 0);
         return <article key={payday.day} className={`overflow-hidden rounded-xl border bg-[#0e0e10] ${reserve < 0 ? 'border-amber-400/25' : 'border-[#242429]'}`}>
-          <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5 sm:pt-5"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-white/[0.04] text-sm font-semibold text-slate-200">{String(payday.day).padStart(2, '0')}</span><div><h3 className="text-sm font-medium text-slate-200">Salário · dia {payday.day}</h3><p className="mt-1 text-[11px] text-slate-500">Entra {money(payday.amount)}{index === 0 && carryIn > 0 ? ` + ${money(carryIn)} trazidos de outubro` : ''}{sundayComplements.length ? ` + ${money(sundayComplements.reduce((sum, row) => sum + row.amount, 0))} de domingo` : ''} · cobre até dia {endDay}</p></div></div><ArrowDownLeft aria-hidden="true" className="h-4 w-4 text-rose-400"/></div>
+          <div className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5 sm:pt-5"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-white/[0.04] text-sm font-semibold text-slate-200">{String(payday.day).padStart(2, '0')}</span><div><h3 className="text-sm font-medium text-slate-200">Salário · dia {payday.day}</h3><p className="mt-1 text-[11px] text-slate-500">Entra {money(payday.amount)}{index === 0 && carryIn > 0 ? ` + ${money(carryIn)} trazidos de outubro para as contas` : ''}{sundayComplements.length ? ` + ${money(sundayComplements.reduce((sum, row) => sum + row.amount, 0))} de domingo` : ''} · cobre até dia {endDay}</p></div></div><ArrowDownLeft aria-hidden="true" className="h-4 w-4 text-rose-400"/></div>
           <div className="grid grid-cols-2 gap-3 px-4 py-4 sm:px-5"><div><p className="text-[10px] text-slate-500">Pagar e separar</p><p className="mt-1.5 text-base font-semibold tabular-nums text-slate-200">{costs > 0 ? money(costs) : 'Nenhuma conta prevista'}</p></div><div><p className="text-[10px] text-slate-500">{reserve < 0 ? 'Ainda falta cobrir' : 'Sobra para a próxima etapa'}</p><p className={`mt-1.5 text-base font-semibold tabular-nums ${reserve < 0 ? 'text-amber-200' : 'text-emerald-300'}`}>{reserve === 0 ? 'Tudo destinado' : money(Math.abs(reserve))}</p></div></div>
           <div className="border-t border-white/[0.05] px-4 py-3 sm:px-5"><p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-slate-500">O que fazer com este valor</p>{itemRows.length || sundayComplements.length ? <ul className="space-y-2">{sundayComplements.map((row, rowIndex) => <li key={`extra-${rowIndex}`} className="flex items-start justify-between gap-3 text-xs"><span className="min-w-0 text-slate-500">Renda extra · domingo dia {row.day}</span><span className="shrink-0 tabular-nums text-slate-400">+{money(row.amount)}</span></li>)}{itemRows.map((row, rowIndex) => <li key={`${row.title}-${rowIndex}`} className="flex items-center justify-between gap-3 text-xs">{row.id ? <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 text-slate-300"><input type="checkbox" checked={row.isPaid} onChange={event => setPaymentPaid(row.id!, event.target.checked)} aria-label={`${row.isPaid ? 'Desmarcar como pago' : 'Marcar como pago'}: ${row.title}`} className="mt-0.5 h-4 w-4 shrink-0 accent-emerald-400"/><span className={`min-w-0 ${row.isPaid ? 'text-slate-500 line-through' : ''}`}>{row.title}<span className="ml-1 text-[10px] text-slate-600">{row.day ? `dia ${row.day}` : ''}</span><span className={`ml-2 text-[10px] ${row.isPaid ? 'text-emerald-400' : 'text-slate-600'}`}>{row.isPaid ? 'Pago' : row.kind}</span></span></label> : <span className="min-w-0 flex-1 text-slate-300">{row.title}<span className="ml-1 text-[10px] text-slate-600">{row.kind}</span></span>}<span className={`shrink-0 font-medium tabular-nums ${row.isPaid ? 'text-slate-500' : 'text-slate-200'}`}>{money(row.amount)}</span></li>)}</ul> : <p className="text-xs text-slate-500">Nenhuma conta ou reserva nesta etapa.</p>}
-            {startingCash > 0 && <p className="mt-3 border-t border-white/[0.05] pt-2 text-[10px] text-slate-500">{index === 0 && carryIn > 0 ? 'Os R$ 90 trazidos de outubro já estão incluídos acima e reservados ao Nubank.' : `${money(startingCash)} que sobrou da etapa anterior.`}</p>}
+            {startingCash > 0 && <p className="mt-3 border-t border-white/[0.05] pt-2 text-[10px] text-slate-500">{index === 0 && carryIn > 0 ? 'Os R$ 90 trazidos de outubro ajudam a cobrir as contas deste mês.' : `${money(startingCash)} que sobrou da etapa anterior.`}</p>}
             {reserve < 0 && <p role="status" className="mt-3 rounded-lg border border-amber-400/15 bg-amber-400/[0.05] p-3 text-[11px] leading-relaxed text-amber-100">Para cobrir tudo até o próximo recebimento, reduza ou adie {money(-reserve)} do valor separado para mercado/combustível. O salário do dia {nextDay <= 31 ? nextDay : '5 do próximo mês'} chega depois.</p>}
           </div>
         </article>;
