@@ -5,7 +5,7 @@ import { billOccurrences, brazilDay, installmentDate, normalizedText, validateMo
 import type { BankAccount } from '../types/finance';
 import { bankDisplayName } from './BankLogo';
 
-type Card = { id: string; providerItemId?: string; name?: string; institution?: string; number?: string };
+type Card = { id: string; providerItemId?: string; name?: string; institution?: string; number?: string; creditData?: { creditLimit?: unknown; availableCreditLimit?: unknown } };
 export function PersonalCashPlan({ data, onChange, privateMode, cards = [], accounts = [] }: {
   data: PlanningData; onChange: (data: PlanningData) => void; privateMode: boolean; cards?: Card[]; accounts?: BankAccount[];
 }) {
@@ -40,6 +40,15 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
   const assigned = fixedTotal + flexible + (plan?.buffer || 0);
   const remaining = income - assigned;
   const hasCardValues = (plan?.cardPayments || []).some(row => row.amount != null);
+  const payoffGoalMonth = `${currentMonth.slice(0, 4)}-12`;
+  const cardDebtTotal = cards.reduce((sum, card) => {
+    const limit = Number(card.creditData?.creditLimit), available = Number(card.creditData?.availableCreditLimit);
+    return Number.isFinite(limit) && Number.isFinite(available) ? sum + Math.max(0, limit - available) : sum;
+  }, 0);
+  const cardPaymentsPlannedThroughMonth = Object.entries(data.cashPlanMonths || {})
+    .filter(([value]) => value >= currentMonth && value <= payoffGoalMonth)
+    .reduce((sum, [, saved]) => sum + (saved.cardPayments || []).reduce((total, row) => total + (row.amount != null && row.amount > 0 ? row.amount : 0), 0), 0);
+  const cardPayoffGap = Math.max(0, cardDebtTotal - cardPaymentsPlannedThroughMonth);
   const input = 'mt-1 min-h-11 w-full rounded-lg border border-white/10 bg-[#101012] px-3 text-sm text-slate-200';
   return <section aria-label="Meu plano de pagamentos" className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -53,6 +62,7 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
         <div><dt className="text-[11px] text-slate-500">Separar neste mês</dt><dd className="mt-2 text-xl font-semibold tracking-tight text-slate-200 tabular-nums">{assigned > 0 ? money(assigned) : 'Sem despesas previstas'}</dd></div>
         <div className="col-span-2 border-t border-white/[0.05] pt-4 sm:col-span-1 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0"><dt className="text-[11px] text-slate-400">{remaining < 0 ? 'Falta no orçamento' : hasCardValues ? 'Após pagamentos previstos' : 'Para distribuir nos cartões'}</dt><dd className={`mt-2 text-2xl font-semibold tracking-tight tabular-nums ${remaining < 0 ? 'text-rose-300' : 'text-white'}`}>{remaining === 0 ? 'Tudo destinado' : money(remaining < 0 ? -remaining : remaining)}</dd></div>
       </dl>
+      {cardDebtTotal > 0 && <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-rose-400/15 bg-rose-400/[0.035] px-4 py-3 sm:px-5"><div className="min-w-0"><p className="text-xs font-medium text-slate-200">Meta: quitar os cartões até {monthName(payoffGoalMonth)}</p><p className="mt-1 text-[10px] leading-relaxed text-slate-500">Total comprometido pelo limite usado: {money(cardDebtTotal)} · pagamentos planejados até dezembro: {money(cardPaymentsPlannedThroughMonth)}. As faturas mostram quanto vence em cada ciclo.</p></div><div className="flex shrink-0 items-center gap-3"><span className="text-right"><span className="block text-[10px] text-slate-500">Ainda falta programar</span><strong className="mt-0.5 block text-sm tabular-nums text-rose-200">{cardPayoffGap > 0 ? money(cardPayoffGap) : 'Meta coberta'}</strong></span><button type="button" onClick={() => setEditing(true)} className="min-h-10 rounded-lg border border-white/10 px-3 text-[11px] text-slate-300 hover:bg-white/5">Ajustar</button></div></div>}
       <div className="rounded-2xl border border-white/[0.06] bg-[#101013] p-4 sm:p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div><h3 className="text-sm font-medium text-slate-200">Sua divisão por recebimento</h3><p className="mt-1 text-[11px] text-slate-500">O salário cobre as contas até a próxima entrada. Os domingos complementam o saldo.</p></div>
