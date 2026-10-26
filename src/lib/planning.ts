@@ -10,10 +10,11 @@ export type Bill = { id: string; title: string; bank: string; category: string; 
 export type ManualCard = { id: string; name: string; bank: string; lastFour: string; closingDay: number; dueDay: number; creditLimit: number | null; availableLimit: number | null; active: boolean; updatedAt: string };
 export type Goal = { id: string; name: string; target: number; saved: number; targetDate: string };
 export type ManualLoan = { id: string; bank: string; title: string; outstanding: number; installment: number; remaining: number; nextDue: string; alsoConnected: boolean; updatedAt: string };
-export type MonthlyCashPlan = { incomes: { day: number; amount: number }[]; fixedExpenses: { id: string; title: string; day: number; amount: number }[]; groceries: number; fuel: number; buffer: number };
+export type CardPaymentForecast = { accountId: string; cardName: string; amount: number | null; dueDay: number | null; kind: 'estimate' | 'confirmed' };
+export type MonthlyCashPlan = { incomes: { day: number; amount: number }[]; fixedExpenses: { id: string; title: string; day: number; amount: number }[]; groceries: number; fuel: number; buffer: number; cardPayments?: CardPaymentForecast[] };
 export type ConnectedCardSchedule = { accountId: string; closingDay: number; dueDay: number };
 export type PriceAlertRule = { ticker: string; dropPct: number; enabled: boolean };
-export type PlanningData = { budgets: Budget[]; bills: Bill[]; goals: Goal[]; manualLoans: ManualLoan[]; manualCards?: ManualCard[]; priceAlerts?: PriceAlertRule[]; cardSchedules?: ConnectedCardSchedule[]; monthlyCashPlan?: MonthlyCashPlan; rules: CategoryRule[]; overrides: Record<string, MovementOverride>; recurrenceDecisions?: Record<string, 'ignored' | 'confirmed'> };
+export type PlanningData = { budgets: Budget[]; bills: Bill[]; goals: Goal[]; manualLoans: ManualLoan[]; manualCards?: ManualCard[]; priceAlerts?: PriceAlertRule[]; cardSchedules?: ConnectedCardSchedule[]; monthlyCashPlan?: MonthlyCashPlan; cashPlanMonths?: Record<string, MonthlyCashPlan>; rules: CategoryRule[]; overrides: Record<string, MovementOverride>; recurrenceDecisions?: Record<string, 'ignored' | 'confirmed'> };
 export const emptyPlanning = (): PlanningData => ({ budgets: [], bills: [], goals: [], manualLoans: [], rules: [], overrides: {} });
 export const normalizedText = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 export function brazilDay(value = new Date().toISOString()) {
@@ -63,6 +64,17 @@ export function classifyTransactions(transactions: FinancialTransaction[], plann
 export type ClassifiedTransaction = ReturnType<typeof classifyTransactions>[number];
 export const isConsumption = (tx: ClassifiedTransaction) => tx.nature === 'expense' && tx.direction === 'debit' && tx.status === 'concluido';
 
+export function validateMonthlyCashPlan(value: unknown): MonthlyCashPlan {
+  const cash = value as MonthlyCashPlan;
+  const amount = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1e12;
+  const day = (v: unknown) => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 31;
+  const text = (v: unknown, max = 160) => typeof v === 'string' && v.trim().length > 0 && v.length <= max;
+  if (!cash || typeof cash !== 'object' || !Array.isArray(cash.incomes) || cash.incomes.length !== 2 || !cash.incomes.every(row => row && day(row.day) && amount(row.amount) && row.amount > 0) || cash.incomes[0].day >= cash.incomes[1].day || !Array.isArray(cash.fixedExpenses) || cash.fixedExpenses.length > 30 || new Set(cash.fixedExpenses.map(row => row?.id)).size !== cash.fixedExpenses.length || !cash.fixedExpenses.every(row => row && text(row.id, 80) && text(row.title) && day(row.day) && amount(row.amount)) || !amount(cash.groceries) || !amount(cash.fuel) || !amount(cash.buffer)) throw new Error('Confira as rendas, datas e despesas do plano.');
+  const cards = cash.cardPayments || [];
+  if (!Array.isArray(cards) || cards.length > 100 || new Set(cards.map(row => row?.accountId)).size !== cards.length || !cards.every(row => row && typeof row.accountId === 'string' && /^[0-9a-f-]{36}$/i.test(row.accountId) && text(row.cardName) && (row.amount === null || amount(row.amount)) && (row.dueDay === null || day(row.dueDay)) && (row.amount === null || row.amount === 0 || row.dueDay !== null) && ['estimate', 'confirmed'].includes(row.kind))) throw new Error('Confira os cartões. Informe o vencimento quando preencher um valor a pagar.');
+  return { incomes: cash.incomes.map(({ day, amount }) => ({ day, amount })), fixedExpenses: cash.fixedExpenses.map(({ id, title, day, amount }) => ({ id, title: title.trim(), day, amount })), groceries: cash.groceries, fuel: cash.fuel, buffer: cash.buffer, cardPayments: cards.map(({ accountId, cardName, amount, dueDay, kind }) => ({ accountId, cardName: cardName.trim(), amount, dueDay, kind })) };
+}
+
 export function validatePlanning(value: unknown): PlanningData {
   if (value == null) return emptyPlanning();
   const data = value as PlanningData;
@@ -88,10 +100,11 @@ export function validatePlanning(value: unknown): PlanningData {
   const cardSchedules = data.cardSchedules || [];
   if (!Array.isArray(cardSchedules) || cardSchedules.length > 100 || new Set(cardSchedules.map(row => row?.accountId)).size !== cardSchedules.length || !cardSchedules.every(row => row && typeof row.accountId === 'string' && /^[0-9a-f-]{36}$/i.test(row.accountId) && Number.isInteger(row.closingDay) && row.closingDay >= 1 && row.closingDay <= 31 && Number.isInteger(row.dueDay) && row.dueDay >= 1 && row.dueDay <= 31)) throw new Error('Datas do cartão inválidas. Use dias entre 1 e 31.');
   const safeSchedules = cardSchedules.map(({ accountId, closingDay, dueDay }) => ({ accountId, closingDay, dueDay }));
-  const cash = data.monthlyCashPlan;
-  if (cash !== undefined && (!cash || typeof cash !== 'object' || !Array.isArray(cash.incomes) || cash.incomes.length !== 2 || !cash.incomes.every(row => row && Number.isInteger(row.day) && row.day >= 1 && row.day <= 31 && amount(row.amount) && row.amount > 0) || cash.incomes[0].day >= cash.incomes[1].day || !Array.isArray(cash.fixedExpenses) || cash.fixedExpenses.length > 30 || new Set(cash.fixedExpenses.map(row => row?.id)).size !== cash.fixedExpenses.length || !cash.fixedExpenses.every(row => identity(row) && text(row.title) && row.title.trim() && Number.isInteger(row.day) && row.day >= 1 && row.day <= 31 && amount(row.amount)) || !amount(cash.groceries) || !amount(cash.fuel) || !amount(cash.buffer))) throw new Error('Plano mensal inválido. Confira as rendas, datas e despesas.');
-  const safeCash = cash === undefined ? undefined : { incomes: cash.incomes.map(({ day, amount }) => ({ day, amount })), fixedExpenses: cash.fixedExpenses.map(({ id, title, day, amount }) => ({ id, title: title.trim(), day, amount })), groceries: cash.groceries, fuel: cash.fuel, buffer: cash.buffer };
+  const safeCash = data.monthlyCashPlan === undefined ? undefined : validateMonthlyCashPlan(data.monthlyCashPlan);
+  const monthPlans = data.cashPlanMonths || {};
+  if (typeof monthPlans !== 'object' || Array.isArray(monthPlans) || Object.keys(monthPlans).length > 120 || !Object.keys(monthPlans).every(month => /^\d{4}-(0[1-9]|1[0-2])$/.test(month))) throw new Error('Meses do planejamento inválidos.');
+  const safeMonthPlans = Object.fromEntries(Object.entries(monthPlans).map(([month, cash]) => [month, validateMonthlyCashPlan(cash)]));
   const safePriceAlerts = priceAlerts.map(({ ticker, dropPct, enabled }) => ({ ticker, dropPct, enabled }));
   const safeCards = manualCards.map(({ id, name, bank, lastFour, closingDay, dueDay, creditLimit, availableLimit, active, updatedAt }) => ({ id, name: name.trim(), bank: bank.trim(), lastFour, closingDay, dueDay, creditLimit, availableLimit, active, updatedAt }));
-  return { budgets: data.budgets, bills: data.bills, goals: data.goals, manualLoans: data.manualLoans, manualCards: safeCards, priceAlerts: safePriceAlerts, cardSchedules: safeSchedules, ...(safeCash ? { monthlyCashPlan: safeCash } : {}), rules: data.rules, overrides: data.overrides, recurrenceDecisions: decisions };
+  return { budgets: data.budgets, bills: data.bills, goals: data.goals, manualLoans: data.manualLoans, manualCards: safeCards, priceAlerts: safePriceAlerts, cardSchedules: safeSchedules, cashPlanMonths: safeMonthPlans, ...(safeCash ? { monthlyCashPlan: safeCash } : {}), rules: data.rules, overrides: data.overrides, recurrenceDecisions: decisions };
 }
