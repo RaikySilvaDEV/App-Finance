@@ -130,6 +130,20 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
   const automaticPayoffTotal = autoPayoffRows.reduce((sum, row) => sum + row.amount, 0);
   const cardPayoffGap = Math.max(0, cardDebtTotal - cardPaymentsPlannedThroughMonth - manualCardPaymentsThroughMonth - automaticPayoffTotal);
   const cardsMissingPayoffDate = month === payoffGoalMonth && cards.some(card => (usedByCard.get(card.id) || 0) > 0 && !autoPayoffRows.some(row => row.id === 'payoff:' + card.id));
+  const novemberPlanMonth = `${currentMonth.slice(0, 4)}-11`;
+  const novemberCardRemainders = month === novemberPlanMonth ? cards.flatMap(card => {
+    const used = usedByCard.get(card.id) || 0;
+    const planned = plan?.cardPayments?.find(row => row.accountId === card.id);
+    const bill = (bankBills || []).find(row => row.accountId === card.id && String(row.dueDate || '').slice(0, 7) === month);
+    if (used <= 0 || bill?.paymentStatus === 'paid') return [];
+    const payment = Math.max(0, planned?.amount ?? (Number(bill?.totalAmount) || 0));
+    if (payment <= 0) return [];
+    const remainingAfterPayment = Math.max(0, used - payment);
+    const dueDay = planned?.dueDay ?? data.cardSchedules?.find(row => row.accountId === card.id)?.dueDay ?? (Number(String(bill?.dueDate || '').slice(8, 10)) || Number(String(card.creditData?.balanceDueDate || '').slice(8, 10)) || 0);
+    const suggestedDay = dueDay ? Math.min(planned?.paymentDay ?? dueDay, dueDay) : 0;
+    const title = cardOptions.find(row => row.id === card.id)?.title || 'Cartão';
+    return [{ id: card.id, title, used, payment, remainingAfterPayment, suggestedDay }];
+  }).filter(row => row.remainingAfterPayment > 0) : [];
   const input = 'mt-1 min-h-11 w-full rounded-lg border border-white/10 bg-[#101012] px-3 text-sm text-slate-200';
   return <section aria-label="Meu plano de pagamentos" className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -144,6 +158,7 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
         <div className="col-span-2 border-t border-white/[0.05] pt-4 sm:col-span-1 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0"><dt className="text-[11px] text-slate-400">{remaining < 0 ? 'Falta no orçamento' : hasCardValues ? 'Após pagamentos previstos' : 'Para distribuir nos cartões'}</dt><dd className={`mt-2 text-2xl font-semibold tracking-tight tabular-nums ${remaining < 0 ? 'text-rose-300' : 'text-white'}`}>{remaining === 0 ? 'Tudo destinado' : money(remaining < 0 ? -remaining : remaining)}</dd></div>
       </dl>
       {cardDebtTotal > 0 && <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-rose-400/15 bg-rose-400/[0.035] px-4 py-3 sm:px-5"><div className="min-w-0"><p className="text-xs font-medium text-slate-200">Meta: quitar os cartões até {monthName(payoffGoalMonth)}</p><p className="mt-1 text-[10px] leading-relaxed text-slate-500">Total comprometido pelo limite usado: {money(cardDebtTotal)} · pagamentos já previstos antes de dezembro: {money(cardPaymentsPlannedThroughMonth + manualCardPaymentsThroughMonth)}. Em dezembro, o saldo restante é calculado automaticamente.</p>{cardsMissingPayoffDate && <p className="mt-1 text-[10px] text-amber-200">Falta uma data de vencimento para programar a quitação de um cartão.</p>}</div><div className="flex shrink-0 items-center gap-3"><span className="text-right"><span className="block text-[10px] text-slate-500">Ainda falta programar</span><strong className="mt-0.5 block text-sm tabular-nums text-rose-200">{cardPayoffGap > 0 ? money(cardPayoffGap) : 'Meta coberta'}</strong></span><button type="button" onClick={() => setEditing(true)} className="min-h-10 rounded-lg border border-white/10 px-3 text-[11px] text-slate-300 hover:bg-white/5">Ajustar</button></div></div>}
+      {novemberCardRemainders.length > 0 && <div className="rounded-xl border border-white/[0.06] bg-[#101013] px-4 py-3 sm:px-5"><p className="text-xs font-medium text-slate-200">Depois do pagamento planejado em novembro</p><div className="mt-2 divide-y divide-white/[0.04]">{novemberCardRemainders.map(row => <div key={row.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 text-[11px]"><span className="text-slate-400">{row.title}: {money(row.used)} usado − {money(row.payment)} em novembro = <strong className="text-slate-200">{money(row.remainingAfterPayment)} restantes</strong></span><span className="text-cyan-200">{row.suggestedDay ? `Quitar em ${String(row.suggestedDay).padStart(2, '0')}/12` : 'Defina o dia para quitar em dezembro'}</span></div>)}</div><p className="mt-1 text-[10px] text-slate-600">Estimativa baseada no limite usado e no pagamento planejado; o saldo real muda quando o banco atualizar após o pagamento.</p></div>}
       <div className="rounded-2xl border border-white/[0.06] bg-[#101013] p-4 sm:p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div><h3 className="text-sm font-medium text-slate-200">Sua divisão por recebimento</h3><p className="mt-1 text-[11px] text-slate-500">O salário cobre as contas até a próxima entrada. Os domingos complementam o saldo.</p></div>
