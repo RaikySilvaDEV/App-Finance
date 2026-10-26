@@ -78,7 +78,7 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
     const baseRows = [...manual, ...fixed, ...loans].filter(row => row.day >= day && row.day < nextDay);
     const grocery = index === 0 ? Math.floor((plan?.groceries || 0) * 100 / 2) / 100 : index === 1 ? (plan?.groceries || 0) - Math.floor((plan?.groceries || 0) * 100 / 2) / 100 : 0;
     const fuel = index === 0 ? Math.floor((plan?.fuel || 0) * 100 / 2) / 100 : index === 1 ? (plan?.fuel || 0) - Math.floor((plan?.fuel || 0) * 100 / 2) / 100 : 0;
-    const buffer = index === 0 ? plan?.buffer || 0 : 0;
+    const buffer = index === salaryDays.length - 1 ? plan?.buffer || 0 : 0;
     const capacity = stageIncome + forecastCarry + (index === 0 ? carryIn : 0) - baseRows.reduce((sum, row) => sum + row.amount, 0) - grocery - fuel - buffer;
     paymentDateLoad.set(day, -capacity);
     forecastCarry = capacity;
@@ -222,7 +222,7 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
         let fuel = (regularIndex === 0 ? Math.floor(plan.fuel * 100 / 2) / 100 : regularIndex === 1 ? plan.fuel - Math.floor(plan.fuel * 100 / 2) / 100 : 0) + fuelShiftCarry;
         groceryShiftCarry = 0;
         fuelShiftCarry = 0;
-        const buffer = regularIndex === 0 ? plan.buffer : 0;
+        const buffer = regularIndex === salaryDates.length - 1 ? plan.buffer : 0;
         const previousStageBalance = carryForward;
         const startingCash = previousStageBalance + (index === 0 ? carryIn : 0);
         const salaryCash = stageIncome.filter(row => !row.additional).reduce((sum, row) => sum + row.amount, 0);
