@@ -1,18 +1,37 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowDownLeft, Pencil } from 'lucide-react';
 import type { PlanningData, MonthlyCashPlan, CardPaymentForecast } from '../lib/planning';
 import { billOccurrences, brazilDay, installmentDate, normalizedText, validateMonthlyCashPlan } from '../lib/planning';
 import type { BankAccount } from '../types/finance';
 import { bankDisplayName } from './BankLogo';
 
-type Card = { id: string; providerItemId?: string; name?: string; institution?: string; number?: string; creditData?: { creditLimit?: unknown; availableCreditLimit?: unknown } };
-export function PersonalCashPlan({ data, onChange, privateMode, cards = [], accounts = [] }: {
-  data: PlanningData; onChange: (data: PlanningData) => void; privateMode: boolean; cards?: Card[]; accounts?: BankAccount[];
+type Card = { id: string; providerItemId?: string; name?: string; institution?: string; number?: string; creditData?: { creditLimit?: unknown; availableCreditLimit?: unknown; balanceDueDate?: unknown } };
+type BankBill = { id: string; accountId: string; providerItemId: string; bank: string; cardName?: string; totalAmount: unknown; totalAmountCurrencyCode?: string; dueDate?: string; paymentStatus?: 'paid' | 'unpaid' | 'unknown' };
+export function PersonalCashPlan({ data, onChange, privateMode, cards = [], accounts = [], itemIds = [] }: {
+  data: PlanningData; onChange: (data: PlanningData) => void; privateMode: boolean; cards?: Card[]; accounts?: BankAccount[]; itemIds?: string[];
 }) {
   const currentMonth = brazilDay().slice(0, 7);
+  const payoffGoalMonth = `${currentMonth.slice(0, 4)}-12`;
   const [month, setMonth] = useState(() => installmentDate(currentMonth + '-01', 1).slice(0, 7));
   const [editing, setEditing] = useState(!data.monthlyCashPlan);
   const [error, setError] = useState('');
+  const [bankBills, setBankBills] = useState<BankBill[] | null>(null);
+  const [bankBillsError, setBankBillsError] = useState('');
+  const itemIdsKey = itemIds.join(',');
+  useEffect(() => {
+    const controller = new AbortController();
+    const ids = itemIdsKey ? itemIdsKey.split(',') : [];
+    if (!ids.length) { setBankBills([]); setBankBillsError(''); return () => controller.abort(); }
+    setBankBills(null); setBankBillsError('');
+    const params = new URLSearchParams(); ids.forEach(id => params.append('itemId', id));
+    fetch(`/api/open-finance/bills?${params}`, { signal: controller.signal }).then(async response => {
+      if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('Não foi possível consultar as faturas.');
+      const body = await response.json();
+      if (!response.ok || !Array.isArray(body.bills)) throw new Error(body.error || 'Não foi possível consultar as faturas.');
+      if (!controller.signal.aborted) setBankBills(body.bills);
+    }).catch(reason => { if (!controller.signal.aborted) setBankBillsError(reason.message || 'Erro ao consultar as faturas.'); });
+    return () => controller.abort();
+  }, [itemIdsKey]);
   const savedPlan = data.cashPlanMonths?.[month] || data.monthlyCashPlan;
   const sundayDay = (occurrence: 2 | 4) => {
     const firstDay = new Date(`${month}-01T12:00:00Z`).getUTCDay();
@@ -24,31 +43,93 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
   const monthName = (value: string) => new Date(value + '-01T12:00:00Z').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
   const months = [...new Set([...Object.keys(data.cashPlanMonths || {}), ...Array.from({ length: 13 }, (_, index) => installmentDate(currentMonth + '-01', index).slice(0, 7))])].sort();
   const dayInMonth = (day: number) => Math.min(day, new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate());
-  const manual = billOccurrences(data.bills).filter(row => row.date.slice(0, 7) === month).map(row => ({ id: row.occurrenceId, title: row.title, day: Number(row.date.slice(8)), amount: row.amount, status: row.isPaid ? 'Pago · informado por você' : 'Cadastrado' }));
+  const allManualOccurrences = billOccurrences(data.bills);
+  const manual = allManualOccurrences.filter(row => row.date.slice(0, 7) === month).map(row => ({ id: row.occurrenceId, title: row.title, bank: row.bank, category: row.category, day: Number(row.date.slice(8)), amount: row.amount, status: row.isPaid ? 'Pago · informado por você' : 'Cadastrado' }));
   const fixed = (plan?.fixedExpenses || []).filter(row => !manual.some(bill => normalizedText(bill.title) === normalizedText(row.title))).map(row => ({ ...row, day: dayInMonth(row.day), status: 'Previsão mensal' }));
   const loans = data.manualLoans.filter(row => !row.alsoConnected && row.remaining > 0 && row.nextDue.slice(0, 7) === month && !manual.some(bill => normalizedText(bill.title) === normalizedText(row.title) && Math.abs(bill.amount - row.installment) < .01)).map(row => ({ id: 'loan:' + row.id, title: row.title, day: Number(row.nextDue.slice(8)), amount: row.installment, status: 'Parcela manual' }));
   const cardOptions = [...new Map([...cards.map(card => {
     const bank = accounts.find(account => account.providerItemId === card.providerItemId)?.bankName || (card.institution !== 'MeuPluggy' ? card.institution : '') || card.name || 'Cartão';
     return [card.id, { id: card.id, title: bankDisplayName(bank), number: card.number }] as const;
   }), ...(plan?.cardPayments || []).filter(row => !cards.some(card => card.id === row.accountId)).map(row => [row.accountId, { id: row.accountId, title: row.cardName, number: undefined }] as const)]).values()];
-  const cardRows = (plan?.cardPayments || []).filter(row => row.amount != null && row.amount > 0 && row.dueDay != null).map(row => ({ id: 'card:' + row.accountId, title: row.cardName + ' · pagamento', day: dayInMonth(row.paymentDay ?? row.dueDay!), amount: row.amount!, status: `Vence dia ${dayInMonth(row.dueDay!)} · ${row.kind === 'confirmed' ? 'valor conferido por você' : 'valor planejado por você'}` }));
-  const payments = [...manual, ...fixed, ...loans, ...cardRows].sort((a, b) => a.day - b.day || a.title.localeCompare(b.title));
-  const pendingCards = cardOptions.filter(card => !plan?.cardPayments?.some(row => row.accountId === card.id && row.amount != null));
+  const selectedBills = (bankBills || []).filter(bill => /^\d{4}-\d{2}-\d{2}/.test(String(bill.dueDate || '')) && String(bill.dueDate || '').slice(0, 7) === month && Number.isFinite(Number(bill.totalAmount)) && Number(bill.totalAmount) > 0 && (bill.totalAmountCurrencyCode || 'BRL') === 'BRL' && bill.paymentStatus !== 'paid').sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+  const isFuturePlan = (period: string, day?: number | null) => day != null && `${period}-${String(day).padStart(2, '0')}` >= brazilDay();
+  const salaryDays = (plan?.incomes || []).filter(row => !row.additional).map(row => dayInMonth(row.day));
+  const paymentDateLoad = new Map<number, number>();
+  let forecastCarry = 0;
+  salaryDays.forEach((day, index) => {
+    const nextDay = salaryDays[index + 1] ?? 32;
+    const stageIncome = (plan?.incomes || []).filter(row => row.day >= day && row.day < nextDay).reduce((sum, row) => sum + row.amount, 0);
+    const baseRows = [...manual, ...fixed, ...loans].filter(row => row.day >= day && row.day < nextDay);
+    const grocery = index === 0 ? Math.floor((plan?.groceries || 0) * 100 / 2) / 100 : index === 1 ? (plan?.groceries || 0) - Math.floor((plan?.groceries || 0) * 100 / 2) / 100 : 0;
+    const fuel = index === 0 ? Math.floor((plan?.fuel || 0) * 100 / 2) / 100 : index === 1 ? (plan?.fuel || 0) - Math.floor((plan?.fuel || 0) * 100 / 2) / 100 : 0;
+    const buffer = index === 0 ? plan?.buffer || 0 : 0;
+    const capacity = stageIncome + forecastCarry - baseRows.reduce((sum, row) => sum + row.amount, 0) - grocery - fuel - buffer;
+    paymentDateLoad.set(day, -capacity);
+    forecastCarry = capacity;
+  });
+  const usedByCard = new Map(cards.map(card => { const limit = Number(card.creditData?.creditLimit), available = Number(card.creditData?.availableCreditLimit); return [card.id, Number.isFinite(limit) && Number.isFinite(available) ? Math.max(0, limit - available) : 0]; }));
+  const matchesCard = (card: Card, text: string) => { const needle = normalizedText(bankDisplayName(accounts.find(account => account.providerItemId === card.providerItemId)?.bankName || card.institution || card.name || '')); const haystack = normalizedText(text); return needle.length >= 4 && (haystack.includes(needle) || needle.includes(haystack)); };
+  const preferredDate = (card: Card, dueDay: number) => {
+    const setting = plan?.cardPayments?.find(row => row.accountId === card.id);
+    const prior = Object.keys(data.cashPlanMonths || {}).filter(value => value < month).sort().reverse().map(value => data.cashPlanMonths![value].cardPayments?.find(row => row.accountId === card.id)).find(value => value != null);
+    const wanted = setting?.paymentDay ?? prior?.paymentDay;
+    if (wanted != null) return Math.min(dayInMonth(wanted), dueDay);
+    const eligible = salaryDays.filter(day => day <= dueDay).sort((a, b) => (paymentDateLoad.get(a) || 0) - (paymentDateLoad.get(b) || 0) || b - a);
+    return eligible[0] ?? dueDay;
+  };
+  const autoPayoffRows = month === payoffGoalMonth ? cards.flatMap(card => {
+    const totalUsed = usedByCard.get(card.id) || 0;
+    if (totalUsed <= 0) return [];
+    const bank = cardOptions.find(option => option.id === card.id)?.title || 'Cartão';
+    const beforeGoalPayments = Object.entries(data.cashPlanMonths || {}).filter(([value]) => value >= currentMonth && value < payoffGoalMonth).reduce((sum, [period, saved]) => sum + (saved.cardPayments || []).filter(row => row.accountId === card.id && row.amount != null && row.amount > 0 && isFuturePlan(period, row.paymentDay ?? row.dueDay)).reduce((subtotal, row) => subtotal + row.amount!, 0), 0);
+    const beforeGoalBills = allManualOccurrences.filter(row => !row.isPaid && row.date >= brazilDay() && row.date.slice(0, 7) >= currentMonth && row.date.slice(0, 7) < payoffGoalMonth && matchesCard(card, `${row.bank || ''} ${row.title}`)).reduce((sum, row) => sum + row.amount, 0);
+    const amount = Math.max(0, totalUsed - beforeGoalPayments - beforeGoalBills);
+    if (amount <= 0) return [];
+    const invoiceDueDay = Number(String(selectedBills.find(bill => bill.accountId === card.id)?.dueDate || '').slice(8, 10));
+    const dueDay = plan?.cardPayments?.find(row => row.accountId === card.id)?.dueDay ?? data.cardSchedules?.find(row => row.accountId === card.id)?.dueDay ?? (invoiceDueDay || Number(String(card.creditData?.balanceDueDate || '').slice(8, 10)) || 0);
+    if (!dueDay) return [];
+    const day = preferredDate(card, dayInMonth(dueDay));
+    paymentDateLoad.set(day, (paymentDateLoad.get(day) || 0) + amount);
+    const currentInvoice = selectedBills.find(bill => bill.accountId === card.id);
+    const invoiceNote = currentInvoice ? ` · fatura do ciclo ${money(Number(currentInvoice.totalAmount))}, vence dia ${Number(String(currentInvoice.dueDate).slice(8, 10))}` : '';
+    return [{ id: 'payoff:' + card.id, title: `${bank} · quitar saldo comprometido`, day, amount, status: `Meta de dezembro · calculado pelo limite usado${invoiceNote}` }];
+  }) : [];
+  const selectedAccountIds = new Set(selectedBills.map(bill => bill.accountId));
+  const autoPayoffAccountIds = new Set(autoPayoffRows.map(row => row.id.slice('payoff:'.length)));
+  const invoiceRows = selectedBills.filter(bill => !autoPayoffAccountIds.has(bill.accountId)).map(bill => {
+    const card = cards.find(row => row.id === bill.accountId);
+    const setting = plan?.cardPayments?.find(row => row.accountId === bill.accountId);
+    const total = Number(bill.totalAmount);
+    const dueDay = dayInMonth(Number(String(bill.dueDate || '').slice(8, 10)) || setting?.dueDay || 1);
+    const amount = setting?.amount != null ? Math.min(setting.amount, total) : total;
+    const day = card ? preferredDate(card, dueDay) : Math.min(setting?.paymentDay ?? dueDay, dueDay);
+    paymentDateLoad.set(day, (paymentDateLoad.get(day) || 0) + amount);
+    const status = bill.paymentStatus === 'unpaid' ? 'Banco indica não paga' : 'Confirme o pagamento no banco';
+    return { id: 'bank-bill:' + bill.id, title: `${bill.bank || 'Cartão'} · fatura`, day, amount, status: `Total ${money(total)} · vence dia ${dueDay} · ${amount < total ? `planejado pagar ${money(amount)} · ` : ''}${status}` };
+  });
+  const cardRows = (plan?.cardPayments || []).filter(row => row.amount != null && row.amount > 0 && row.dueDay != null && !selectedAccountIds.has(row.accountId) && !autoPayoffRows.some(auto => auto.id === 'payoff:' + row.accountId)).map(row => ({ id: 'card:' + row.accountId, title: row.cardName + ' · pagamento', day: dayInMonth(row.paymentDay ?? row.dueDay!), amount: row.amount!, status: `Vence dia ${dayInMonth(row.dueDay!)} · ${row.kind === 'confirmed' ? 'valor conferido por você' : 'valor planejado por você'}` }));
+  const duplicateManualIds = new Set(selectedBills.flatMap(bill => manual.filter(row => normalizedText(row.category || '').includes('fatura') && normalizedText(row.bank || row.title) === normalizedText(bill.bank)).map(row => row.id)));
+  const duplicatePayoffManualIds = new Set(month === payoffGoalMonth ? manual.filter(row => cards.some(card => matchesCard(card, `${row.bank || ''} ${row.title}`))).map(row => row.id) : []);
+  const visibleManual = manual.filter(row => !duplicateManualIds.has(row.id) && !duplicatePayoffManualIds.has(row.id));
+  const payments = [...visibleManual, ...fixed, ...loans, ...invoiceRows, ...cardRows, ...autoPayoffRows].sort((a, b) => a.day - b.day || a.title.localeCompare(b.title));
+  const pendingCards = bankBills === null && itemIds.length > 0 ? [] : cardOptions.filter(card => !selectedAccountIds.has(card.id) && !autoPayoffRows.some(row => row.id === 'payoff:' + card.id) && !plan?.cardPayments?.some(row => row.accountId === card.id && row.amount != null));
   const income = (plan?.incomes || []).reduce((sum, row) => sum + row.amount, 0);
   const fixedTotal = payments.reduce((sum, row) => sum + row.amount, 0);
   const flexible = (plan?.groceries || 0) + (plan?.fuel || 0);
   const assigned = fixedTotal + flexible + (plan?.buffer || 0);
   const remaining = income - assigned;
   const hasCardValues = (plan?.cardPayments || []).some(row => row.amount != null);
-  const payoffGoalMonth = `${currentMonth.slice(0, 4)}-12`;
   const cardDebtTotal = cards.reduce((sum, card) => {
     const limit = Number(card.creditData?.creditLimit), available = Number(card.creditData?.availableCreditLimit);
     return Number.isFinite(limit) && Number.isFinite(available) ? sum + Math.max(0, limit - available) : sum;
   }, 0);
   const cardPaymentsPlannedThroughMonth = Object.entries(data.cashPlanMonths || {})
-    .filter(([value]) => value >= currentMonth && value <= payoffGoalMonth)
-    .reduce((sum, [, saved]) => sum + (saved.cardPayments || []).reduce((total, row) => total + (row.amount != null && row.amount > 0 ? row.amount : 0), 0), 0);
-  const cardPayoffGap = Math.max(0, cardDebtTotal - cardPaymentsPlannedThroughMonth);
+    .filter(([value]) => value >= currentMonth && value < payoffGoalMonth)
+    .reduce((sum, [period, saved]) => sum + (saved.cardPayments || []).reduce((total, row) => total + (row.amount != null && row.amount > 0 && isFuturePlan(period, row.paymentDay ?? row.dueDay) ? row.amount : 0), 0), 0);
+  const manualCardPaymentsThroughMonth = allManualOccurrences.filter(row => !row.isPaid && row.date >= brazilDay() && row.date.slice(0, 7) >= currentMonth && row.date.slice(0, 7) < payoffGoalMonth && cards.some(card => matchesCard(card, `${row.bank || ''} ${row.title}`))).reduce((sum, row) => sum + row.amount, 0);
+  const automaticPayoffTotal = autoPayoffRows.reduce((sum, row) => sum + row.amount, 0);
+  const cardPayoffGap = Math.max(0, cardDebtTotal - cardPaymentsPlannedThroughMonth - manualCardPaymentsThroughMonth - automaticPayoffTotal);
+  const cardsMissingPayoffDate = month === payoffGoalMonth && cards.some(card => (usedByCard.get(card.id) || 0) > 0 && !autoPayoffRows.some(row => row.id === 'payoff:' + card.id));
   const input = 'mt-1 min-h-11 w-full rounded-lg border border-white/10 bg-[#101012] px-3 text-sm text-slate-200';
   return <section aria-label="Meu plano de pagamentos" className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -62,13 +143,16 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
         <div><dt className="text-[11px] text-slate-500">Separar neste mês</dt><dd className="mt-2 text-xl font-semibold tracking-tight text-slate-200 tabular-nums">{assigned > 0 ? money(assigned) : 'Sem despesas previstas'}</dd></div>
         <div className="col-span-2 border-t border-white/[0.05] pt-4 sm:col-span-1 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0"><dt className="text-[11px] text-slate-400">{remaining < 0 ? 'Falta no orçamento' : hasCardValues ? 'Após pagamentos previstos' : 'Para distribuir nos cartões'}</dt><dd className={`mt-2 text-2xl font-semibold tracking-tight tabular-nums ${remaining < 0 ? 'text-rose-300' : 'text-white'}`}>{remaining === 0 ? 'Tudo destinado' : money(remaining < 0 ? -remaining : remaining)}</dd></div>
       </dl>
-      {cardDebtTotal > 0 && <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-rose-400/15 bg-rose-400/[0.035] px-4 py-3 sm:px-5"><div className="min-w-0"><p className="text-xs font-medium text-slate-200">Meta: quitar os cartões até {monthName(payoffGoalMonth)}</p><p className="mt-1 text-[10px] leading-relaxed text-slate-500">Total comprometido pelo limite usado: {money(cardDebtTotal)} · pagamentos planejados até dezembro: {money(cardPaymentsPlannedThroughMonth)}. As faturas mostram quanto vence em cada ciclo.</p></div><div className="flex shrink-0 items-center gap-3"><span className="text-right"><span className="block text-[10px] text-slate-500">Ainda falta programar</span><strong className="mt-0.5 block text-sm tabular-nums text-rose-200">{cardPayoffGap > 0 ? money(cardPayoffGap) : 'Meta coberta'}</strong></span><button type="button" onClick={() => setEditing(true)} className="min-h-10 rounded-lg border border-white/10 px-3 text-[11px] text-slate-300 hover:bg-white/5">Ajustar</button></div></div>}
+      {cardDebtTotal > 0 && <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-rose-400/15 bg-rose-400/[0.035] px-4 py-3 sm:px-5"><div className="min-w-0"><p className="text-xs font-medium text-slate-200">Meta: quitar os cartões até {monthName(payoffGoalMonth)}</p><p className="mt-1 text-[10px] leading-relaxed text-slate-500">Total comprometido pelo limite usado: {money(cardDebtTotal)} · pagamentos já previstos antes de dezembro: {money(cardPaymentsPlannedThroughMonth + manualCardPaymentsThroughMonth)}. Em dezembro, o saldo restante é calculado automaticamente.</p>{cardsMissingPayoffDate && <p className="mt-1 text-[10px] text-amber-200">Falta uma data de vencimento para programar a quitação de um cartão.</p>}</div><div className="flex shrink-0 items-center gap-3"><span className="text-right"><span className="block text-[10px] text-slate-500">Ainda falta programar</span><strong className="mt-0.5 block text-sm tabular-nums text-rose-200">{cardPayoffGap > 0 ? money(cardPayoffGap) : 'Meta coberta'}</strong></span><button type="button" onClick={() => setEditing(true)} className="min-h-10 rounded-lg border border-white/10 px-3 text-[11px] text-slate-300 hover:bg-white/5">Ajustar</button></div></div>}
       <div className="rounded-2xl border border-white/[0.06] bg-[#101013] p-4 sm:p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div><h3 className="text-sm font-medium text-slate-200">Sua divisão por recebimento</h3><p className="mt-1 text-[11px] text-slate-500">O salário cobre as contas até a próxima entrada. Os domingos complementam o saldo.</p></div>
           <span className="hidden rounded-full bg-white/[0.04] px-3 py-1 text-[10px] text-slate-400 sm:inline">{monthName(month)}</span>
         </div>
-      {pendingCards.length > 0 ? <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><p className="text-slate-500">Falta prever: {pendingCards.map(card => card.title).join(', ')}.</p><button type="button" onClick={() => setEditing(true)} className="min-h-10 text-rose-300 hover:underline">Planejar cartões →</button></div> : <p className="text-[11px] text-slate-500">{plan.buffer > 0 ? `${money(plan.buffer)} de margem de segurança incluída. ` : ''}Valores previstos para {monthName(month)}.</p>}
+      {bankBills === null && itemIds.length > 0 && <p role="status" className="text-[11px] text-slate-500">Consultando os valores e vencimentos informados pelos bancos…</p>}
+      {bankBillsError && <p role="status" className="text-[11px] text-amber-200">Não foi possível buscar as faturas agora. Mantive os valores que você já planejou.</p>}
+      {bankBills !== null && !bankBillsError && <p className="text-[11px] text-slate-500">Faturas sincronizadas com os bancos; datas preferidas são mantidas e as demais são distribuídas antes do vencimento. O planejamento não efetua pagamentos.</p>}
+      {pendingCards.length > 0 && <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><p className="text-slate-500">Ainda sem fatura ou valor planejado: {pendingCards.map(card => card.title).join(', ')}.</p><button type="button" onClick={() => setEditing(true)} className="min-h-10 text-rose-300 hover:underline">Planejar cartões →</button></div>}
       <div className="mt-4 grid gap-3 lg:grid-cols-2">{(() => { let carryForward = 0; const salaryDates = plan.incomes.filter(row => !row.additional); return salaryDates.map((payday, index) => {
         const nextDay = salaryDates[index + 1]?.day || 32;
         const stageIncome = plan.incomes.filter(row => row.day >= dayInMonth(payday.day) && row.day < nextDay);
@@ -98,7 +182,7 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
       </div>
       {remaining < 0 && <p role="status" className="text-xs leading-relaxed text-rose-300">Os pagamentos previstos ultrapassam a renda. Ajuste despesas ou o plano de pagamento; o sistema não considera limite de crédito como renda.</p>}
       {payments.some(row => row.day < dayInMonth(plan.incomes[0].day)) && <p role="status" className="text-xs text-amber-200">Há contas antes do primeiro recebimento. Reserve esses valores no mês anterior.</p>}
-      <p className="text-[11px] leading-relaxed text-slate-600">{data.cashPlanMonths?.[month] ? 'Plano ajustado para este mês.' : 'Previsão inicial com seus limites padrão.'} Revise despesas variáveis e faturas antes de pagar. {pendingCards.length > 0 ? 'Os cartões sem valor ainda não entram no total.' : ''}</p>
+      <p className="text-[11px] leading-relaxed text-slate-600">{data.cashPlanMonths?.[month] ? 'Plano ajustado para este mês.' : 'Previsão inicial com seus limites padrão.'} Faturas pagas pelo banco não são repetidas no plano; quando o banco não confirma o pagamento, a fatura aparece para conferência.</p>
     </>}
     {editing && <section id="cash-plan-editor" aria-label="Editar plano do mês" className="rounded-2xl border border-[#242429] bg-[#101013] p-5">
       <h3 className="mb-2 text-sm font-medium text-slate-200">Ajustes de {monthName(month)}</h3>
@@ -127,9 +211,13 @@ export function PersonalCashPlan({ data, onChange, privateMode, cards = [], acco
           const row = plan?.cardPayments?.find(row => row.accountId === card.id);
           const previousPlan = Object.keys(data.cashPlanMonths || {}).filter(value => value < month).sort().reverse().map(value => data.cashPlanMonths![value].cardPayments?.find(row => row.accountId === card.id)).find(value => value != null);
           const previousDay = previousPlan?.dueDay;
-          const dueDay = row?.dueDay ?? data.cardSchedules?.find(row => row.accountId === card.id)?.dueDay ?? previousDay ?? '';
-          const paymentDay = row?.paymentDay ?? previousPlan?.paymentDay ?? dueDay;
-          return <fieldset key={card.id} className="rounded-xl border border-white/[0.06] p-4"><legend className="px-1 text-xs text-slate-300">{card.title}{!privateMode && card.number ? ` · final ${card.number}` : ''}</legend><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><label className="text-[11px] text-slate-500">Pagamento planejado neste mês (R$)<input name={`cardAmount${index}`} type="number" min="0" max="1000000000000" step="0.01" defaultValue={row?.amount ?? ''} placeholder="A confirmar" className={input}/></label><label className="text-[11px] text-slate-500">Pagar no dia<input name={`cardPaymentDay${index}`} type="number" min="1" max="31" step="1" defaultValue={paymentDay} placeholder="Dia" className={input}/></label><label className="text-[11px] text-slate-500">Vencimento · dia<input name={`cardDay${index}`} type="number" min="1" max="31" step="1" defaultValue={dueDay} placeholder="Dia" className={input}/></label><label className="text-[11px] text-slate-500">Referência do valor<select name={`cardKind${index}`} defaultValue={row?.kind || 'estimate'} className={input}><option value="estimate">Estimativa</option><option value="confirmed">Conferido por mim no banco</option></select></label></div></fieldset>;
+          const bill = selectedBills.find(bill => bill.accountId === card.id);
+          const payoff = autoPayoffRows.find(item => item.id === 'payoff:' + card.id);
+          const billDueDay = Number(String(bill?.dueDate || '').slice(8, 10));
+          const dueDay = row?.dueDay ?? data.cardSchedules?.find(row => row.accountId === card.id)?.dueDay ?? (billDueDay || previousDay || Number(String(card.creditData?.balanceDueDate || '').slice(8, 10)) || '');
+          const paymentDay = row?.paymentDay ?? previousPlan?.paymentDay ?? (dueDay ? preferredDate(card, Number(dueDay)) : '');
+          const automaticAmount = month === payoffGoalMonth ? payoff?.amount : bill ? Number(bill.totalAmount) : undefined;
+          return <fieldset key={card.id} className="rounded-xl border border-white/[0.06] p-4"><legend className="px-1 text-xs text-slate-300">{card.title}{!privateMode && card.number ? ` · final ${card.number}` : ''}</legend><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><label className="text-[11px] text-slate-500">Pagamento planejado neste mês (R$)<input name={`cardAmount${index}`} type="number" min="0" max="1000000000000" step="0.01" defaultValue={row?.amount ?? automaticAmount ?? ''} placeholder="A confirmar" className={input}/></label><label className="text-[11px] text-slate-500">Pagar no dia<input name={`cardPaymentDay${index}`} type="number" min="1" max="31" step="1" defaultValue={paymentDay} placeholder="Dia" className={input}/></label><label className="text-[11px] text-slate-500">Vencimento · dia<input name={`cardDay${index}`} type="number" min="1" max="31" step="1" defaultValue={dueDay} placeholder="Dia" className={input}/></label><label className="text-[11px] text-slate-500">Referência do valor<select name={`cardKind${index}`} defaultValue={row?.kind || 'estimate'} className={input}><option value="estimate">Estimativa automática</option><option value="confirmed">Conferido por mim no banco</option></select></label></div></fieldset>;
         })}<p className="text-[11px] text-slate-600">Informe quanto pretende pagar neste mês. Esse valor pode ser parcial; não é necessariamente o total da fatura e não registra um pagamento no banco.</p></fieldset>}
         <details className="group rounded-xl border border-white/[0.06] px-4" open={!plan}><summary className="min-h-11 cursor-pointer py-3 text-xs text-slate-400">Renda e despesas variáveis</summary><div className="space-y-4 pb-4">
           <div className="grid gap-3 sm:grid-cols-2">{[0, 1].map(index => { const regular = plan?.incomes.filter(income => !income.additional)[index]; return <fieldset key={index} className="grid grid-cols-[1fr_2fr] gap-3"><legend className="mb-2 text-[11px] text-slate-500">{index + 1}º recebimento</legend><label className="text-xs text-slate-400">Dia<input className={input} name={index ? 'secondDay' : 'firstDay'} type="number" min="1" max="31" step="1" required defaultValue={regular?.day ?? (index ? 20 : 5)}/></label><label className="text-xs text-slate-400">Valor líquido (R$)<input className={input} name={index ? 'secondIncome' : 'firstIncome'} type="number" min="0.01" max="1000000000000" step="0.01" required defaultValue={regular?.amount ?? ''}/></label></fieldset>})}</div>
